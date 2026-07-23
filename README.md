@@ -1,58 +1,99 @@
-# Daily AI-Security X Post — Setup
+# **AI Security Daily Post Generator**
 
-One Python script, one required API key. Runs once a day via cron or Task Scheduler.
+A Python pipeline that finds one noteworthy new item each day about using AI to **defend corporate environments** — a product release, demo, article, research paper, or open-source tool — and drafts an X/Twitter post about it with the link and hashtags. Powered by the Claude API and its built-in web search tool, so a single API key covers both research and drafting.
 
-## 1. Install
+Human-in-the-loop by default: the script generates a draft for you to review and post yourself. Automated posting via the X API is available but optional.
 
-```bash
-pip install anthropic tweepy
-```
+## **How it works**
 
-## 2. Keys
+Each run:
 
-| Variable | Needed for | Where to get it |
-|---|---|---|
-| `ANTHROPIC_API_KEY` | always (search + drafting) | https://console.anthropic.com |
-| `X_API_KEY`, `X_API_SECRET`, `X_ACCESS_TOKEN`, `X_ACCESS_SECRET` | only `--post` (auto-publish) | https://developer.x.com — create an app with **Read and Write** permissions |
+1. Searches the web for substantive, defense-focused AI-security content from roughly the last 7 days (detection, response, hardening, GRC automation, SOC tooling — not attacks).  
+2. Skips anything already used, tracked in `history.json`.  
+3. Drafts a post in a practitioner-focused voice with 2–3 relevant hashtags, sized to fit X's 280-character limit with the link.  
+4. Prints the draft to the terminal and appends it to `drafts.md`, along with a one-line rationale for the pick.  
+5. Logs the outcome (success or failure) with a timestamp to `run.log`.
 
-The script uses Claude's built-in web search tool, so no separate search API is needed.
+## **Requirements**
 
-## 3. Try it
+* Python 3.9+ (tested on 3.14)  
+* An Anthropic API key — https://console.anthropic.com  
+* `anthropic` Python package (`tweepy` additionally, only if using `--post`)
 
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-python daily_ai_security_post.py          # generates a draft, saves to drafts.md
-python daily_ai_security_post.py --post   # generates AND publishes to X
-```
+## **Setup**
 
-Files created next to the script:
-- `drafts.md` — running log of every generated post
-- `history.json` — URLs already used, so the same item is never picked twice
+**1\. Create a virtual environment and install the dependency** (required on Homebrew/modern-distro Pythons, which block system-wide pip installs per PEP 668):
 
-## 4. Schedule once a day
+python3 \-m venv \~/.ai\_post\_venv  
+\~/.ai\_post\_venv/bin/pip install anthropic
 
-**Linux / macOS (cron):** `crontab -e`, then (8:00 AM daily):
+**2\. Store your API key** in a protected file in your home directory — outside the repo, so it can never be committed:
 
-```cron
-0 8 * * * ANTHROPIC_API_KEY=sk-ant-... /usr/bin/python3 /path/to/daily_ai_security_post.py >> /path/to/run.log 2>&1
-```
+echo 'export ANTHROPIC\_API\_KEY=sk-ant-your-full-key' \> \~/.ai\_post\_env  
+chmod 600 \~/.ai\_post\_env
 
-Add the X_* variables and `--post` when you're ready for auto-publish.
+The script loads this file automatically at startup (an already-set environment variable takes precedence, handy for one-off overrides). The `export` prefix is optional but lets the same file double as a shell-sourceable env file.
 
-**Windows (Task Scheduler):**
+**3\. Output location.** Drafts, history, and the run log are written to `~/XPosts` (created automatically on first run), keeping generated content out of the repo. Change `DATA_DIR` at the top of the script to relocate.
 
-```powershell
-schtasks /create /tn "DailyAISecurityPost" /tr "python C:\path\daily_ai_security_post.py" /sc daily /st 08:00
-```
+## **Usage**
 
-Set the environment variables under System Properties → Environment Variables (user scope is fine).
+### **Manual run (default workflow)**
 
-## 5. Recommended rollout
+\~/.ai\_post\_venv/bin/python daily\_ai\_security\_post.py
 
-Run in draft mode for the first week and review `drafts.md` each morning. When you're happy with the voice, switch the scheduled command to `--post`.
+The draft prints to the terminal and lands in `~/XPosts/drafts.md`; review, optionally tweak, and post it yourself. Run whenever you choose — dedup makes irregular timing safe, and running twice in a day simply yields a second, different item.
 
-## Tuning
+For a shorter command, a small wrapper script works well (kept outside the repo, e.g. `~/XPosts/aipost.sh`):
 
-- Voice/tone rules live in `VOICE_GUIDELINES` in the script (already excludes any career-length or age-signaling references).
-- Hashtag pool and defense-only focus live in `RESEARCH_PROMPT`.
-- Post time = whatever time you schedule; the script itself has no clock logic.
+\#\!/usr/bin/env bash  
+set \-euo pipefail  
+exec "$HOME/.ai\_post\_venv/bin/python" "/path/to/daily\_ai\_security\_post.py" "$@"
+
+`chmod +x` it once, then each day is just `~/XPosts/aipost.sh`.
+
+### **Optional: automated posting**
+
+With X API credentials, `--post` publishes directly instead of drafting:
+
+\~/.ai\_post\_venv/bin/pip install tweepy  
+python daily\_ai\_security\_post.py \--post
+
+Requires an X developer app with **Read and Write** permissions and four user-context credentials added to `~/.ai_post_env` (a Bearer token alone is app-only auth and cannot post):
+
+export X\_API\_KEY=...  
+export X\_API\_SECRET=...  
+export X\_ACCESS\_TOKEN=...  
+export X\_ACCESS\_SECRET=...
+
+### **Optional: scheduling with cron**
+
+To run unattended once a day (machine must be awake at the scheduled time):
+
+0 8 \* \* \* $HOME/.ai\_post\_venv/bin/python /path/to/daily\_ai\_security\_post.py \>\> $HOME/XPosts/cron.log 2\>&1
+
+The built-in env-file loading means no key handling is needed in the crontab. On laptops that sleep, consider `anacron` (Linux) or `launchd` (macOS) for "run once a day whenever awake" semantics.
+
+## **Generated files (in `~/XPosts`)**
+
+| File | Purpose |
+| ----- | ----- |
+| `drafts.md` | Running log of every generated post with date, title, and rationale |
+| `history.json` | URLs already used — dedup across runs |
+| `run.log` | One timestamped line per run: success with the item picked, or the failure reason |
+
+## **Tuning**
+
+* **Voice and hard rules** (tone, hashtag pool, no-hype constraints): `VOICE_GUIDELINES` in the script.  
+* **Topic focus and source preferences**: `RESEARCH_PROMPT` — e.g., add "prefer the original vendor/author page over news roundups" to bias toward primary sources.  
+* **Model**: the `MODEL` constant (defaults to `claude-sonnet-4-6`).
+
+## **Security notes**
+
+* The API key lives in a `chmod 600` file in your home directory and is never stored in the repo; `.gitignore` also defensively excludes `.ai_post_env`, `*.env`, and generated output.  
+* Before any public push: `grep -ri "sk-ant" .` in the repo folder should return nothing.  
+* If a key is ever committed, removing it later does not scrub git history — rotate the key.
+
+## **License**
+
+MIT
