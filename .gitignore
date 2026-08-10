@@ -1,0 +1,17 @@
+# Secrets — never commit
+.ai_post_env
+*.env
+.env*
+
+# Personal profile and generated output (live in ~/XPosts by default)
+author_profile.md
+drafts.md
+history.json
+run.log
+
+# IDE and Python noise
+.idea/
+.vscode/
+__pycache__/
+*.pyc
+.venv/
