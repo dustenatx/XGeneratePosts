@@ -16,19 +16,29 @@ Delete everything above this line once you have read it.
 
 ---
 
+## Topics
+
+*The menu you pick from at run time. Optional — omit this section and the
+script falls back to its built-in catalog of common IT areas.*
+
+One topic per line. Bullets and numbering are stripped, so any of these work.
+Make them specific enough to steer a web search: "Kubernetes and container
+platforms" searches better than "infrastructure".
+
+- (topic)
+- (topic)
+- (topic)
+
 ## Beat
 
-*What should it go looking for every day, and for whom?*
+*Not the subject — the subject is chosen per run from Topics above. This is
+what makes an item worth posting about, whatever the topic is.*
 
-Name the subject area, what counts as a good find, what to exclude, and who
-the audience is. Be specific enough that two people reading it would search
-for the same thing.
-
-- Topic:
 - Good finds look like:
 - Exclude:
 - Audience:
 - Recency: prefer items from roughly the last 7 days
+- The lens you read everything through:
 
 ## Voice
 
@@ -38,11 +48,28 @@ The single highest-leverage section. Positions and priors matter more than
 adjectives — "believes X" gives the model something to argue from, "smart and
 approachable" does not.
 
-- What you believe about this space (2-4 real positions, including anything
-  you disagree with the mainstream about):
-- What you consistently notice or care about that others skip:
-- Tone (e.g. plain, dry, direct; skeptical but not cynical):
-- Words and habits to avoid:
+What I believe about this space:
+
+- (2-4 real positions, including anything where you disagree with the
+  mainstream)
+
+What I care about enough to argue in public:
+
+- (the things that actually get you going — this is the passion layer, and its
+  absence is what makes generated posts feel like nobody wrote them)
+
+How I actually write:
+
+- (cadence, sentence length, habits, words to avoid)
+
+Sentences I have actually written, for cadence — do not reuse them verbatim:
+
+- (paste 4-6 real sentences of your own from emails, docs, posts, anything)
+
+This last list is worth more than everything above it. A description of your
+tone produces competent generic prose; actual samples give the model something
+to imitate. Strip anything from them you would not want repeated — employer
+names, figures you keep private.
 
 ## Experience
 
@@ -60,10 +87,13 @@ guardrail below.
 
 Guardrail — keep this, it does real work:
 
-- Reference AT MOST ONE of the above per post, and only when it directly
-  illuminates the item — never as a credential flex.
+- BEFORE writing, check this list for a genuine connection to the item. If one
+  exists, use it. If nothing genuinely connects, write the post without one.
+  Do not force it.
+- Use AT MOST ONE per post, worked in as evidence for a claim, not as a
+  credential.
 - NEVER invent experience, metrics, employers, clients, tools, or anecdotes
-  beyond this list. If none fits, write the post without any.
+  beyond this list.
 
 ## Never
 
@@ -77,13 +107,12 @@ guess. Common entries:
 - Never claim hands-on depth with tools I have not used — opinions are fine,
   implied operational history is not.
 - Never inflate my title, level, or scope.
+- If today's topic is one where my depth is thin, write from principle rather
+  than manufacturing a war story to fill the gap.
 - Never disparage a named company; critique the pattern instead.
 
 ## Hashtags
 
-*A pool to draw from, not a fixed set.*
-
-List 6-10 tags you are comfortable being associated with. The model picks the
-subset that fits each item.
+*A pool to draw from, not a fixed set. Cover every topic you listed.*
 
 #YourTag #YourTag #YourTag
