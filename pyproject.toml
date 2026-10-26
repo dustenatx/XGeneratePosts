@@ -9,3 +9,7 @@ select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "RUF", "T20"]
 # daily_post.py is a command-line tool; print() is its user interface.
 "daily_post.py" = ["T201"]
 "tests/**" = ["S101"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
