@@ -1,0 +1,35 @@
+name: autofix-notice
+on:
+  push:
+    branches-ignore: [master]
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  notice:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Mention Dusten on auto-fix commits
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # Commit messages are read from the event file by jq, never interpolated into the script.
+          jq -r '.commits[]
+            | select(.message | startswith("autofix(ci):"))
+            | "- `\(.id[0:7])` \(.message | split("\n")[0])\n  Undo: `git revert \(.id)`"' \
+            "$GITHUB_EVENT_PATH" > notice.md
+          if [ ! -s notice.md ]; then exit 0; fi
+          pr=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+          if [ -z "$pr" ]; then echo "No open PR for this branch"; exit 0; fi
+          {
+            echo "@dustenatx Claude auto-fix pushed these CI fix commits:"
+            echo
+            cat notice.md
+            echo
+            echo "Review the diff before merging. To undo one, run its revert command or ask Claude to revert it."
+          } > body.md
+          gh pr comment "$pr" --repo "$REPO" --body-file body.md

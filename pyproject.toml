@@ -1,0 +1,11 @@
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "RUF", "T20"]
+
+[tool.ruff.lint.per-file-ignores]
+# daily_post.py is a command-line tool; print() is its user interface.
+"daily_post.py" = ["T201"]
+"tests/**" = ["S101"]
