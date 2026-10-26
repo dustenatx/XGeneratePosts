@@ -2,8 +2,10 @@
 
 Pick a technology topic, and this finds one noteworthy recent item on it and
 drafts two social posts from that same source: a short one for X and a longer,
-opinionated one for LinkedIn. Powered by the Claude API and its built-in web
-search tool, so a single API key covers both the research and the writing.
+opinionated one for LinkedIn. By default it runs on Groq's free tier, where one
+call both searches the web and writes the posts. Anthropic's Claude, or any
+OpenAI-compatible endpoint, can be swapped in with a flag, and RSS feeds you
+choose can replace the web search.
 
 Human-in-the-loop by default. Nothing is published unless you ask for it.
 
@@ -21,7 +23,8 @@ Each run:
    prompt, `--random-topic` rolls the dice.
 2. Searches the web for a substantive recent item in that area, filtered by
    your **beat**: what counts as a good find, what to exclude, who it is for.
-3. Skips anything already used, tracked in `history.json`.
+   With `--search rss` it chooses from your feeds' newest entries instead.
+3. Skips anything already used, by URL or by title, tracked in `history.json`.
 4. Writes two posts from that one source. The X version reports; the LinkedIn
    version argues — it takes a position, says what the item does not solve,
    and ends with a question worth answering.
@@ -31,26 +34,33 @@ Each run:
 
 ## Requirements
 
-- Python 3.9+ (developed on 3.14)
-- An Anthropic API key — https://console.anthropic.com
-- `anthropic` (plus `tweepy` only if you use `--post`)
+- Python 3.14 or newer
+- A free Groq API key — https://console.groq.com/keys
+- Nothing else for the default setup: the `groq` and `openai-compat` providers
+  use only the standard library. `anthropic` is needed only for
+  `--provider anthropic`, and `tweepy` only for `--post`.
 
 ## Setup
 
 **1. Virtual environment.** Required on Homebrew and modern-distro Pythons,
-which block system-wide pip installs per PEP 668:
+which block system-wide pip installs per PEP 668. Nothing needs installing for
+the default provider:
 
 ```bash
 python3 -m venv ~/.ai_post_venv
+# only if you will use --provider anthropic:
 ~/.ai_post_venv/bin/pip install anthropic
 ```
 
 **2. API key**, in a protected file outside the repo:
 
 ```bash
-echo 'export ANTHROPIC_API_KEY=sk-ant-your-full-key' > ~/.ai_post_env
+echo 'export GROQ_API_KEY=gsk_your-full-key' >> ~/.ai_post_env
 chmod 600 ~/.ai_post_env
 ```
+
+Use `ANTHROPIC_API_KEY` instead (from https://console.anthropic.com/settings/keys)
+if you run `--provider anthropic`.
 
 The script loads this at startup. An already-set environment variable wins,
 which is handy for one-off overrides. The `export` prefix is optional but lets
@@ -74,6 +84,7 @@ The scaffold explains each section:
 | `## Experience` | Things you have really done that posts may reference, with a guardrail capping it at one per post |
 | `## Never` | Hard rules: no employer names, no invented hands-on claims, whatever would misrepresent you |
 | `## Hashtags` | A pool to draw from |
+| `## Feeds` | RSS or Atom feed URLs, one per line. Used only with `--search rss` |
 
 Beat and Voice are required. Spend your time on **Voice** — and especially on
 pasting a handful of sentences you actually wrote. A description of your tone
@@ -103,6 +114,8 @@ different item.
 | `--list-topics` | Show the menu and exit |
 | `--history` | Show the last 10 items used, with their topics |
 | `--profile PATH` | Use a different profile file — handy for running more than one persona |
+| `--provider NAME` | `groq`, `anthropic` or `openai-compat`. Default: `AI_POST_PROVIDER`, else `groq` |
+| `--search SOURCE` | `native` or `rss`. Default: `AI_POST_SEARCH`, else `native` for `groq` and `anthropic`, `rss` for `openai-compat` |
 | `--post` | Publish the X version (see below) |
 | `--post-linkedin` | Publish the LinkedIn version (see below) |
 
@@ -117,6 +130,52 @@ exec "$HOME/.ai_post_venv/bin/python" "/path/to/daily_post.py" "$@"
 
 `chmod +x` it once, then each day is `~/XPosts/aipost.sh` — and arguments pass
 straight through, so `~/XPosts/aipost.sh --topic kubernetes` works too.
+
+### Providers and search
+
+| Provider | Model | Native search | Credential |
+|---|---|---|---|
+| `groq` (default) | `openai/gpt-oss-120b`, or `GROQ_MODEL` | Groq's `browser_search` tool | `GROQ_API_KEY` |
+| `anthropic` | `claude-sonnet-4-6` | Anthropic's `web_search` tool | `ANTHROPIC_API_KEY` |
+| `openai-compat` | `OPENAI_COMPAT_MODEL` | None; uses `--search rss` | `OPENAI_COMPAT_API_KEY`, if the service needs one |
+
+`openai-compat` reaches Gemini, Cerebras or a local Ollama server with no code
+change: set `OPENAI_COMPAT_BASE_URL` to the endpoint up to `/v1` (https only;
+plain http is allowed for `localhost`) and `OPENAI_COMPAT_MODEL` to its model
+name. A missing credential stops the run with the variable to set; the script
+never falls back to another provider.
+
+With `--search rss`, the script reads the feeds in your profile's `## Feeds`
+section and the model chooses from their newest entries, without searching the
+web. Feed text is passed to the model as clearly marked data, never as
+instructions. Feeds must be `https://`; a feed that redirects to plain `http://`,
+fails, or isn't valid RSS or Atom is logged to `run.log` and skipped, and the
+run fails only if no feed has a new entry. RSS needs Python's Expat XML library
+at 2.7.2 or newer, which current Python releases include; the script checks
+and exits with both versions if it isn't.
+
+**Groq free plan.** Whether the free plan allows `browser_search`, and whether
+one search call fits its tokens-per-minute limit, is not published. If a
+`--provider groq` run is refused or rate limited, run
+`--provider groq --search rss` instead: Groq then only writes the posts, from
+your feeds.
+
+Environment variables (set them in `~/.ai_post_env` or the shell):
+
+| Variable | Default | Effect |
+|---|---|---|
+| `AI_POST_PROVIDER` | `groq` | Provider when `--provider` isn't given |
+| `AI_POST_SEARCH` | `native` for `groq` and `anthropic`, `rss` for `openai-compat` | Search source when `--search` isn't given |
+| `GROQ_API_KEY` | none | Groq key, from https://console.groq.com/keys |
+| `GROQ_MODEL` | `openai/gpt-oss-120b` | Groq model |
+| `ANTHROPIC_API_KEY` | none | Anthropic key, for `--provider anthropic` |
+| `OPENAI_COMPAT_BASE_URL` | none | Endpoint up to `/v1`, for `--provider openai-compat` |
+| `OPENAI_COMPAT_MODEL` | none | Model name, for `--provider openai-compat` |
+| `OPENAI_COMPAT_API_KEY` | none | Key for that service; not needed for local Ollama |
+| `AI_POST_PROVIDER_TIMEOUT` | `120` | Seconds to wait for a response. Applies to `groq` and `openai-compat` only; `anthropic` keeps its SDK's own timeout. Feed requests always time out after 15 seconds |
+| `AI_POST_RSS_PER_FEED` | `3` | Newest entries taken from each feed with `--search rss` |
+| `AI_POST_DATA_DIR` | `~/XPosts` | Where the profile, drafts, history and run log live |
+| `AI_POST_ENV_FILE` | `~/.ai_post_env` | The key file loaded at startup |
 
 ### Optional: publishing to X
 
@@ -174,6 +233,8 @@ In the repo:
 |---|---|
 | `daily_post.py` | The generator |
 | `author_profile.example.md` | Scaffold to copy and fill in |
+| `tests/` | Unit tests, run with `uvx --python 3.14 pytest@9.1.1`; no network needed |
+| `docs/decisions.md` | Owner decisions and recorded departures |
 
 In your data directory (`~/XPosts` by default, override with
 `AI_POST_DATA_DIR`):
@@ -181,9 +242,9 @@ In your data directory (`~/XPosts` by default, override with
 | File | Purpose |
 |---|---|
 | `author_profile.md` | Your topics and voice. You write this; the script only reads it |
-| `drafts.md` | Every draft generated, with date, topic, title, and rationale |
-| `history.json` | URLs already used — dedup across runs |
-| `run.log` | One timestamped line per run |
+| `drafts.md` | Every draft generated, with date, topic, title, rationale, and the provider and search source used |
+| `history.json` | URLs and titles already used — dedup across runs — with the provider, model and search source of each |
+| `run.log` | One timestamped line per run, ending with the provider and search source |
 
 ## Design notes
 
@@ -212,10 +273,15 @@ topics vary, since some days will land outside your deepest expertise.
 
 ## Security notes
 
-- The API key lives in a `chmod 600` file in your home directory, never in the
+- API keys live in a `chmod 600` file in your home directory, never in the
   repo. `.gitignore` also excludes `.ai_post_env`, `*.env`, your profile, and
-  all generated output.
-- Before any public push: `grep -ri "sk-ant" .` should return nothing.
+  all generated output. Error messages name the variable, never its value.
+- Before any public push: `grep -riE "sk-ant|gsk_" .` should return nothing
+  except placeholders: the examples in this README and the script, and the
+  fake sentinel key in `tests/conftest.py`.
+- Web pages and feed entries can contain text aimed at the model. Drafts are
+  never published unless you pass `--post` or `--post-linkedin`, so read each
+  one before posting.
 - If a key is ever committed, deleting it later does not scrub git history —
   rotate the key.
 
