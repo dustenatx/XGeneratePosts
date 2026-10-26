@@ -20,14 +20,23 @@ Default behavior is draft-only: both posts are printed and appended to
 drafts.md for you to review and post yourself. Optional flags can publish to
 X (--post) or LinkedIn (--post-linkedin).
 
+The model comes from one of three providers (--provider, default groq):
+
+  * groq           — free tier; the standard library is enough.
+  * openai-compat  — any OpenAI-compatible endpoint (Gemini, Cerebras, Ollama).
+  * anthropic      — paid; needs the anthropic package.
+
 Requirements:
-    pip install anthropic        (tweepy additionally, only for --post)
+    Python standard library only for groq and openai-compat.
+    pip install anthropic        (only for --provider anthropic)
+    pip install tweepy           (only for --post)
 
 Credentials are read from ~/.ai_post_env — see README.md.
 """
 
 import argparse
 import json
+import math
 import os
 import random
 import re
@@ -52,6 +61,20 @@ ENV_FILE = Path(os.environ.get("AI_POST_ENV_FILE", Path.home() / ".ai_post_env")
 
 CONSOLE_BILLING = "https://console.anthropic.com/settings/billing"
 CONSOLE_KEYS = "https://console.anthropic.com/settings/keys"
+
+PROVIDERS = ("anthropic", "groq", "openai-compat")
+DEFAULT_PROVIDER = "groq"
+
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+GROQ_DEFAULT_MODEL = "openai/gpt-oss-120b"  # groq/compound was shut down 21 Sep 2026
+GROQ_KEYS = "https://console.groq.com/keys"
+
+# Server-side search can take a minute or more, so provider calls get a long
+# timeout. Applies to groq and openai-compat; the anthropic SDK keeps its own.
+DEFAULT_PROVIDER_TIMEOUT = 120.0  # seconds, override with AI_POST_PROVIDER_TIMEOUT
+
+HTTP_USER_AGENT = "XGeneratePosts/3 (+https://github.com/dustenatx/XGeneratePosts)"
+MAX_RESPONSE_BYTES = 2_000_000  # cap on any one HTTP response we read
 
 MAX_TWEET_TEXT = 255  # 280 minus ~24 chars X reserves for a t.co link
 MAX_LINKEDIN_TEXT = 1100  # hard ceiling; the prompt targets 750-950
@@ -471,6 +494,273 @@ class AnthropicProvider:
         return "\n".join(b.text for b in response.content if b.type == "text")
 
 
+class InsecureRedirectError(urllib.error.URLError):
+    """An HTTPS request was redirected to a non-HTTPS URL."""
+
+
+class NoDowngradeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Follow redirects, except from HTTPS to anything that is not HTTPS.
+
+    A downgraded feed can be altered in transit, and urllib would carry an
+    Authorization header across the redirect.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if req.full_url.lower().startswith("https://") and not newurl.lower().startswith(
+            "https://"
+        ):
+            raise InsecureRedirectError(f"refused redirect from HTTPS to {newurl}")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+HTTP_OPENER = urllib.request.build_opener(NoDowngradeRedirectHandler)
+
+
+def read_capped(response, limit: int = MAX_RESPONSE_BYTES) -> bytes:
+    """Read at most `limit` bytes; anything larger is refused, not truncated."""
+    body = response.read(limit + 1)
+    if len(body) > limit:
+        raise ValueError(f"response is larger than {limit:,} bytes")
+    return body
+
+
+def redact(text: str, *secrets: str) -> str:
+    """Remove secret values from text that is about to be shown or logged."""
+    for secret in secrets:
+        if secret and len(secret) >= 8:
+            text = text.replace(secret, "[redacted]")
+    return text
+
+
+def provider_timeout() -> float:
+    """Seconds to wait for a groq or openai-compat response (R20)."""
+    raw = os.environ.get("AI_POST_PROVIDER_TIMEOUT", "").strip()
+    if not raw:
+        return DEFAULT_PROVIDER_TIMEOUT
+    try:
+        value = float(raw)
+    except ValueError:
+        value = -1.0
+    if not math.isfinite(value) or value <= 0:
+        raise SystemExit(
+            f"\nAI_POST_PROVIDER_TIMEOUT must be a positive number of seconds; got {raw!r}.\n"
+            f"  Remove it to use the default of {DEFAULT_PROVIDER_TIMEOUT:g} seconds.\n"
+        )
+    return value
+
+
+class OpenAICompatProvider:
+    """Any OpenAI-compatible chat completions endpoint, via the standard
+    library. Base URL and model come from the environment (R4)."""
+
+    name = "openai-compat"
+    key_var = "OPENAI_COMPAT_API_KEY"
+    keys_url = ""  # depends on the service behind the base URL
+
+    def __init__(self) -> None:
+        self.base_url = os.environ.get("OPENAI_COMPAT_BASE_URL", "").strip().rstrip("/")
+        self.model = os.environ.get("OPENAI_COMPAT_MODEL", "").strip()
+
+    def api_key(self) -> str:
+        return os.environ.get(self.key_var, "").strip()
+
+    def require_credentials(self) -> None:
+        missing = [
+            var
+            for var, value in (
+                ("OPENAI_COMPAT_BASE_URL", self.base_url),
+                ("OPENAI_COMPAT_MODEL", self.model),
+            )
+            if not value
+        ]
+        if missing:
+            raise SystemExit(
+                f"\n--provider openai-compat needs {' and '.join(missing)} in {ENV_FILE}.\n\n"
+                "  OPENAI_COMPAT_BASE_URL is the endpoint up to /v1, for example\n"
+                "  http://localhost:11434/v1 for a local Ollama server.\n"
+                "  OPENAI_COMPAT_MODEL is the model name that service expects.\n"
+                "  OPENAI_COMPAT_API_KEY is the service's API key; a local\n"
+                "  Ollama server needs none. Get it from that service's console.\n"
+            )
+        local = re.match(r"^http://(localhost|127\.0\.0\.1)(:\d+)?(/|$)", self.base_url)
+        if not self.base_url.startswith("https://") and not local:
+            raise SystemExit(
+                "\nOPENAI_COMPAT_BASE_URL must start with https:// (plain http is\n"
+                "  allowed only for localhost, e.g. a local Ollama server).\n"
+            )
+
+    def request_body(self, prompt: str) -> dict:
+        return {"model": self.model, "messages": [{"role": "user", "content": prompt}]}
+
+    def generate(self, prompt: str) -> str:
+        payload = chat_completion(self, self.request_body(prompt))
+        try:
+            text = payload["choices"][0]["message"]["content"]
+        except KeyError, IndexError, TypeError:
+            text = None
+        if not isinstance(text, str) or not text.strip():
+            raise SystemExit(
+                f"\n{self.name} returned no text for model {self.model}.\n\n"
+                f"  Re-run — this is usually a one-off.\n\n  {NOTHING_LOST}\n"
+            )
+        return text
+
+
+class GroqProvider(OpenAICompatProvider):
+    """Groq's free tier, with its server-side browser_search tool."""
+
+    name = "groq"
+    key_var = "GROQ_API_KEY"
+    keys_url = GROQ_KEYS
+
+    def __init__(self) -> None:
+        self.base_url = GROQ_BASE_URL
+        self.model = os.environ.get("GROQ_MODEL", "").strip() or GROQ_DEFAULT_MODEL
+
+    def require_credentials(self) -> None:
+        if not self.api_key():
+            raise SystemExit(
+                f"\nNo GROQ_API_KEY found for --provider groq (checked {ENV_FILE} and "
+                f"the environment).\n\n  Create one at {GROQ_KEYS}, then:\n\n"
+                f"    echo 'export GROQ_API_KEY=gsk_...' >> {ENV_FILE}\n"
+                f"    chmod 600 {ENV_FILE}\n\n"
+                "  Or pick another provider with --provider.\n"
+            )
+
+    def request_body(self, prompt: str) -> dict:
+        body = super().request_body(prompt)
+        body["tools"] = [{"type": "browser_search"}]
+        body["tool_choice"] = "required"
+        body["reasoning_effort"] = "low"  # higher means much longer browsing
+        return body
+
+
+def chat_completion(provider: OpenAICompatProvider, body: dict) -> dict:
+    """POST to {base_url}/chat/completions and return the parsed JSON.
+
+    Every expected failure exits with a remedy; the API key is never shown.
+    """
+    key = provider.api_key()
+    headers = {"Content-Type": "application/json", "User-Agent": HTTP_USER_AGENT}
+    if key:
+        headers["Authorization"] = f"Bearer {key}"
+    request = urllib.request.Request(  # noqa: S310 - scheme checked in require_credentials
+        f"{provider.base_url}/chat/completions",
+        data=json.dumps(body).encode(),
+        headers=headers,
+        method="POST",
+    )
+    timeout = provider_timeout()
+    try:
+        with HTTP_OPENER.open(request, timeout=timeout) as response:
+            raw = read_capped(response)
+    except urllib.error.HTTPError as exc:
+        raise SystemExit(f"\n{redact(friendly_http_error(provider, exc), key)}\n") from None
+    except TimeoutError:
+        raise SystemExit(timeout_message(provider, timeout)) from None
+    except urllib.error.URLError as exc:
+        if isinstance(exc.reason, TimeoutError):
+            raise SystemExit(timeout_message(provider, timeout)) from None
+        raise SystemExit(
+            redact(
+                f"\nCould not reach {provider.name} at {provider.base_url}: {exc.reason}\n\n"
+                "  Check your network connection, then re-run.\n\n"
+                f"  {NOTHING_LOST}\n",
+                key,
+            )
+        ) from None
+    except ValueError as exc:
+        raise SystemExit(f"\n{provider.name} response refused: {exc}.\n") from None
+
+    try:
+        return json.loads(raw)
+    except ValueError:
+        raise SystemExit(
+            f"\n{provider.name} returned something that is not JSON.\n\n"
+            "  Check the base URL points at an OpenAI-compatible /v1 endpoint.\n"
+        ) from None
+
+
+def timeout_message(provider: OpenAICompatProvider, timeout: float) -> str:
+    return (
+        f"\n{provider.name} sent no response within {timeout:g} seconds.\n\n"
+        "  Server-side search can be slow. Raise AI_POST_PROVIDER_TIMEOUT,\n"
+        f"  or use --search rss so the model only writes.\n\n  {NOTHING_LOST}\n"
+    )
+
+
+def friendly_http_error(provider: OpenAICompatProvider, exc: urllib.error.HTTPError) -> str:
+    """Turn an HTTP error from an OpenAI-compatible API into a remedy.
+
+    Error bodies look like {"error": {"message": ..., "type": ...}}.
+    """
+    try:
+        body = exc.read(4000).decode("utf-8", "replace")
+    except OSError, AttributeError:  # no body attached
+        body = ""
+    try:
+        detail = str(json.loads(body)["error"]["message"])
+    except ValueError, KeyError, TypeError:
+        detail = body.strip()
+    detail = detail[:300] or "(no detail)"
+    code = exc.code
+    name = provider.name
+    where = f" Create a new one at {provider.keys_url}." if provider.keys_url else ""
+
+    if code == 401:
+        return (
+            f"{name} rejected the API key ({code}).\n\n"
+            f"  Check {provider.key_var} in {ENV_FILE}.{where}\n"
+            f"  A stale {provider.key_var} set in your shell overrides the file."
+        )
+    if code == 403:
+        return (
+            f"{name} refused the request ({code}): {detail}\n\n"
+            "  The key may lack access to this model or tool. If the free plan\n"
+            "  does not allow server-side search, re-run with --search rss."
+        )
+    if code == 404:
+        return (
+            f"{name} could not find the model or endpoint ({code}): {detail}\n\n"
+            f"  Check the model name ({provider.model}) and base URL ({provider.base_url})."
+        )
+    if code == 413 or code == 429:
+        retry = exc.headers.get("retry-after") if exc.headers else None
+        wait = f" {name} suggests waiting {retry} seconds." if retry else ""
+        return (
+            f"{name} rate or size limit hit ({code}): {detail}\n\n"
+            f"  Wait a minute and re-run.{wait} If one call is over the\n"
+            "  tokens-per-minute limit, --search rss sends a smaller request.\n\n"
+            f"  {NOTHING_LOST}"
+        )
+    if code == 498 or code >= 500:
+        return (
+            f"{name} returned a server error ({code}).\n\n"
+            "  This is on their end, not yours. Wait a few minutes and\n"
+            f"  re-run.\n\n  {NOTHING_LOST}"
+        )
+    return f"{name} returned an error ({code}): {detail}"
+
+
+def select_provider(flag: str | None) -> str:
+    """--provider, then AI_POST_PROVIDER, then the default (R1)."""
+    name = (flag or os.environ.get("AI_POST_PROVIDER", "") or DEFAULT_PROVIDER).strip().lower()
+    if name not in PROVIDERS:
+        raise SystemExit(
+            f"\nUnknown provider {name!r} (from AI_POST_PROVIDER). "
+            f"Choose one of: {', '.join(PROVIDERS)}.\n"
+        )
+    return name
+
+
+def make_provider(name: str):
+    return {
+        "anthropic": AnthropicProvider,
+        "groq": GroqProvider,
+        "openai-compat": OpenAICompatProvider,
+    }[name]()
+
+
 # ---------------------------------------------------------------------------
 # Generation
 # ---------------------------------------------------------------------------
@@ -680,6 +970,11 @@ def main() -> None:
         help=f"author profile path (default: {PROFILE_FILE})",
     )
     parser.add_argument(
+        "--provider",
+        choices=PROVIDERS,
+        help=f"LLM provider (default: AI_POST_PROVIDER, else {DEFAULT_PROVIDER})",
+    )
+    parser.add_argument(
         "--post", action="store_true", help="publish the X version instead of only drafting"
     )
     parser.add_argument(
@@ -708,7 +1003,7 @@ def main() -> None:
             print(f"{i:>2}. {topic}")
         return
 
-    provider = AnthropicProvider()
+    provider = make_provider(select_provider(args.provider))
     provider.require_credentials()
 
     topic = choose_topic(topics, args.topic, args.random_topic)
