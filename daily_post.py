@@ -206,6 +206,10 @@ Today is {today}. {task}
 Do NOT pick any of these already-used URLs:
 {used_urls}
 
+Do NOT pick an item with any of these already-used titles, even at a
+different URL:
+{used_titles}
+
 Pick exactly ONE item — the most substantive and interesting to the audience
 described. Then write TWO posts about it in the author's voice. They share a
 source but are not the same post: the X version reports, the LinkedIn version
@@ -352,7 +356,13 @@ def choose_topic(topics: list, requested: str | None = None, pick_random: bool =
     return answer
 
 
-def build_prompt(profile: dict, topic: str, used_urls: list, candidates: str | None = None) -> str:
+def build_prompt(
+    profile: dict,
+    topic: str,
+    used_urls: list,
+    used_titles: list,
+    candidates: str | None = None,
+) -> str:
     """Assemble the prompt. `candidates` is the RSS entry block; None means
     the provider searches the web itself."""
 
@@ -376,6 +386,8 @@ def build_prompt(profile: dict, topic: str, used_urls: list, candidates: str | N
         never=block("Hard rules — never do these", "never"),
         hashtags=block("Preferred hashtags", "hashtags"),
         used_urls="\n".join(f"- {u}" for u in used_urls[-60:]) or "- (none yet)",
+        used_titles="\n".join(f"- {clean_text(t, 200)}" for t in used_titles[-60:])
+        or "- (none yet)",
         x_rules=X_RULES.format(max_len=MAX_TWEET_TEXT),
         linkedin_rules=LINKEDIN_RULES.format(max_len=MAX_LINKEDIN_TEXT),
     )
@@ -386,10 +398,14 @@ def build_prompt(profile: dict, topic: str, used_urls: list, candidates: str | N
 # ---------------------------------------------------------------------------
 
 
+RUN_VIA = ""  # "provider/model, search source" once main() has chosen them (R13)
+
+
 def log_run(message: str) -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
+    via = f" [via {RUN_VIA}]" if RUN_VIA else ""
     with LOG_FILE.open("a") as f:
-        f.write(f"{datetime.now().isoformat(timespec='seconds')} {message}\n")
+        f.write(f"{datetime.now().isoformat(timespec='seconds')} {message}{via}\n")
 
 
 def load_history() -> list:
@@ -405,13 +421,41 @@ def save_history(history: list) -> None:
     HISTORY_FILE.write_text(json.dumps(history, indent=2))
 
 
+def normalize_title(title: str | None) -> str:
+    """Case-folded, whitespace collapsed (R17)."""
+    return " ".join((title or "").casefold().split())
+
+
+def used_from(history: list) -> tuple:
+    """(used URLs, used titles) from history.json entries, oldest first."""
+    return (
+        [h["url"] for h in history if h.get("url")],
+        [h["title"] for h in history if h.get("title")],
+    )
+
+
+def is_used(url: str, title: str | None, used_urls: list, used_titles: list) -> bool:
+    """True if the URL, or the normalized title, has been used before (R17)."""
+    if url in used_urls:
+        return True
+    title = normalize_title(title)
+    return bool(title) and title in {normalize_title(t) for t in used_titles}
+
+
 def log_drafts(
-    item: dict, topic: str, x_post: str, li_post: str, posted_x: bool, posted_li: bool
+    item: dict,
+    topic: str,
+    x_post: str,
+    li_post: str,
+    posted_x: bool,
+    posted_li: bool,
+    via: str = "",
 ) -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     entry = (
         f"\n---\n\n# {date.today().isoformat()} — {item['title']}\n\n"
         f"Topic: {topic}\n"
+        f"Via: {via or 'n/a'}\n"
         f"Source: {item.get('source', 'n/a')}\n"
         f"Why: {item.get('why', 'n/a')}\n\n"
         f"## X{' (POSTED)' if posted_x else ''}\n\n{x_post}\n\n"
@@ -849,7 +893,7 @@ class NativeSearch:
 
     name = "native"
 
-    def candidates(self, used_urls: list) -> str | None:
+    def candidates(self, used_urls: list, used_titles: list) -> str | None:
         return None
 
 
@@ -1007,8 +1051,7 @@ class RssSearch:
         self.per_feed = rss_per_feed()
         self.links = set()
 
-    def candidates(self, used_urls: list) -> str:
-        used = set(used_urls)
+    def candidates(self, used_urls: list, used_titles: list) -> str:
         picked = []
         for url in self.feeds:
             try:
@@ -1020,7 +1063,9 @@ class RssSearch:
                 # URLError, HTTPError and timeouts are all OSError.
                 warn(f"feed skipped, {type(exc).__name__}: {exc}: {url}")
                 continue
-            fresh = [e for e in entries if e["link"] not in used]
+            fresh = [
+                e for e in entries if not is_used(e["link"], e["title"], used_urls, used_titles)
+            ]
             for entry in newest(fresh, self.per_feed):
                 entry["feed"] = urlsplit(url).hostname or url
                 picked.append(entry)
@@ -1090,9 +1135,11 @@ def trim(text: str, limit: int) -> str:
     return cut[: cut.rfind(" ")].strip() + "…"
 
 
-def generate_item(provider, search, profile: dict, topic: str, used_urls: list) -> dict:
-    candidates = search.candidates(used_urls)
-    prompt = build_prompt(profile, topic, used_urls, candidates)
+def generate_item(
+    provider, search, profile: dict, topic: str, used_urls: list, used_titles: list
+) -> dict:
+    candidates = search.candidates(used_urls, used_titles)
+    prompt = build_prompt(profile, topic, used_urls, used_titles, candidates)
     text = provider.generate(prompt, native_search=candidates is None)
 
     try:
@@ -1111,9 +1158,9 @@ def generate_item(provider, search, profile: dict, topic: str, used_urls: list) 
             f"  Re-run — this is usually a one-off.\n\n  {NOTHING_LOST}\n"
         )
 
-    if item["url"] in used_urls:
+    if is_used(item["url"], item["title"], used_urls, used_titles):
         raise SystemExit(
-            f"\nThe model picked an item already covered:\n  {item['url']}\n\n"
+            f"\nThe model picked an item already covered:\n  {item['title']}\n  {item['url']}\n\n"
             "  Re-run, or try a different topic — this one may be quiet this\n"
             f"  week.\n\n  {NOTHING_LOST}\n"
         )
@@ -1309,21 +1356,24 @@ def main() -> None:
             print(f"{i:>2}. {topic}")
         return
 
+    global RUN_VIA
     provider = make_provider(select_provider(args.provider))
+    search_name = select_search(args.search, provider.name)
+    RUN_VIA = f"{provider.name}/{provider.model or 'unset'}, search {search_name}"
     provider.require_credentials()
-    search = make_search(select_search(args.search, provider.name), profile)
+    search = make_search(search_name, profile)
 
     topic = choose_topic(topics, args.topic, args.random_topic)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     history = load_history()
-    used_urls = [h["url"] for h in history]
+    used_urls, used_titles = used_from(history)
 
     if search.name == "rss":
         print(f"\nReading {len(search.feeds)} feed(s) for: {topic}\n")
     else:
         print(f"\nSearching: {topic}\n")
-    item = generate_item(provider, search, profile, topic, used_urls)
+    item = generate_item(provider, search, profile, topic, used_urls, used_titles)
     x_post, li_post = compose_posts(item)
 
     tweet_id = post_to_x(x_post) if args.post else ""
@@ -1338,10 +1388,13 @@ def main() -> None:
             "posted_x": bool(tweet_id),
             "posted_linkedin": bool(li_id),
             "tweet_id": tweet_id,
+            "provider": provider.name,
+            "model": provider.model,
+            "search": search.name,
         }
     )
     save_history(history)
-    log_drafts(item, topic, x_post, li_post, bool(tweet_id), bool(li_id))
+    log_drafts(item, topic, x_post, li_post, bool(tweet_id), bool(li_id), RUN_VIA)
     log_run(f"OK — [{topic}] {item['title']} ({item['url']})")
 
     rule = "=" * 70
