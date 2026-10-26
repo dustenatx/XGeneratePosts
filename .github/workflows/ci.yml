@@ -26,3 +26,9 @@ jobs:
         run: uvx ruff@0.16.10 check .
       - name: Format check (ruff)
         run: uvx ruff@0.16.10 format --check .
+      # No lockfile until v3.1: pytest is pinned exactly, and --exclude-newer
+      # fixes the date its own dependencies resolve against.
+      - name: Expat version
+        run: uv run --no-project --python 3.14 python -c "import pyexpat; print(pyexpat.EXPAT_VERSION)"
+      - name: Tests (pytest)
+        run: uvx --python 3.14 --exclude-newer 2026-10-20 pytest@9.1.1
