@@ -46,17 +46,17 @@ import anthropic
 MODEL = "claude-sonnet-4-6"
 
 DATA_DIR = Path(os.environ.get("AI_POST_DATA_DIR", Path.home() / "XPosts"))
-PROFILE_FILE = DATA_DIR / "author_profile.md"   # your voice — never in the repo
-HISTORY_FILE = DATA_DIR / "history.json"        # URLs already used (dedup)
-DRAFTS_FILE = DATA_DIR / "drafts.md"            # running log of drafts
-LOG_FILE = DATA_DIR / "run.log"                 # one line per run
+PROFILE_FILE = DATA_DIR / "author_profile.md"  # your voice — never in the repo
+HISTORY_FILE = DATA_DIR / "history.json"  # URLs already used (dedup)
+DRAFTS_FILE = DATA_DIR / "drafts.md"  # running log of drafts
+LOG_FILE = DATA_DIR / "run.log"  # one line per run
 ENV_FILE = Path(os.environ.get("AI_POST_ENV_FILE", Path.home() / ".ai_post_env"))
 
 CONSOLE_BILLING = "https://console.anthropic.com/settings/billing"
 CONSOLE_KEYS = "https://console.anthropic.com/settings/keys"
 
-MAX_TWEET_TEXT = 255       # 280 minus ~24 chars X reserves for a t.co link
-MAX_LINKEDIN_TEXT = 1100   # hard ceiling; the prompt targets 750-950
+MAX_TWEET_TEXT = 255  # 280 minus ~24 chars X reserves for a t.co link
+MAX_LINKEDIN_TEXT = 1100  # hard ceiling; the prompt targets 750-950
 
 # Fallback topic menu. Override it with a '## Topics' section in your profile —
 # one topic per line, optionally "Label — extra scoping detail".
@@ -79,12 +79,12 @@ TOPIC_CATALOG = [
 
 # Profile sections. "required" ones must be present and non-empty.
 PROFILE_SECTIONS = {
-    "beat": True,        # audience, exclusions, what counts as a good find
-    "voice": True,       # how the author thinks and sounds
-    "topics": False,     # menu of technology areas to choose from
-    "experience": False, # verified things the author may reference
-    "never": False,      # hard rules
-    "hashtags": False,   # preferred tag pool
+    "beat": True,  # audience, exclusions, what counts as a good find
+    "voice": True,  # how the author thinks and sounds
+    "topics": False,  # menu of technology areas to choose from
+    "experience": False,  # verified things the author may reference
+    "never": False,  # hard rules
+    "hashtags": False,  # preferred tag pool
 }
 
 # ---------------------------------------------------------------------------
@@ -181,6 +181,7 @@ one sentence: why you picked it
 # Environment and profile
 # ---------------------------------------------------------------------------
 
+
 def load_env_file(path: Path = ENV_FILE) -> None:
     """Load KEY=value lines (with or without a leading 'export ') into
     os.environ. Variables already set in the environment win."""
@@ -191,7 +192,7 @@ def load_env_file(path: Path = ENV_FILE) -> None:
         if not line or line.startswith("#"):
             continue
         if line.startswith("export "):
-            line = line[len("export "):]
+            line = line[len("export ") :]
         key, sep, value = line.partition("=")
         key = key.strip()
         if sep and key and key not in os.environ:
@@ -222,8 +223,9 @@ def load_profile(path: Path) -> dict:
             sections[current].append(line)
 
     parsed = {k: "\n".join(v).strip() for k, v in sections.items()}
-    missing = [name for name, required in PROFILE_SECTIONS.items()
-               if required and not parsed.get(name)]
+    missing = [
+        name for name, required in PROFILE_SECTIONS.items() if required and not parsed.get(name)
+    ]
     if missing:
         raise SystemExit(
             f"{path} is missing required section(s): "
@@ -245,8 +247,7 @@ def topic_menu(profile: dict) -> list:
     return topics or list(TOPIC_CATALOG)
 
 
-def choose_topic(topics: list, requested: str = None,
-                 pick_random: bool = False) -> str:
+def choose_topic(topics: list, requested: str = None, pick_random: bool = False) -> str:
     """Resolve the topic from --topic, --random-topic, or an interactive menu.
 
     --topic accepts a menu number, a case-insensitive substring of a menu
@@ -262,13 +263,13 @@ def choose_topic(topics: list, requested: str = None,
         if len(matches) == 1:
             return matches[0]
         if len(matches) > 1:
-            raise SystemExit("Ambiguous --topic. Matches:\n  "
-                             + "\n  ".join(matches))
+            raise SystemExit("Ambiguous --topic. Matches:\n  " + "\n  ".join(matches))
         return requested  # free-text topic, not in the menu
 
     if not sys.stdin.isatty():
-        raise SystemExit("No topic given and no terminal to ask on. Use "
-                         "--topic \"...\" or --random-topic.")
+        raise SystemExit(
+            'No topic given and no terminal to ask on. Use --topic "..." or --random-topic.'
+        )
 
     print("\nPick a topic for today:\n")
     for i, topic in enumerate(topics, 1):
@@ -309,6 +310,7 @@ def build_prompt(profile: dict, topic: str, used_urls: list) -> str:
 # Storage helpers
 # ---------------------------------------------------------------------------
 
+
 def log_run(message: str) -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     with LOG_FILE.open("a") as f:
@@ -320,8 +322,7 @@ def load_history() -> list:
         try:
             return json.loads(HISTORY_FILE.read_text())
         except json.JSONDecodeError:
-            print(f"WARNING: {HISTORY_FILE} is corrupt; starting fresh.",
-                  file=sys.stderr)
+            print(f"WARNING: {HISTORY_FILE} is corrupt; starting fresh.", file=sys.stderr)
     return []
 
 
@@ -329,8 +330,9 @@ def save_history(history: list) -> None:
     HISTORY_FILE.write_text(json.dumps(history, indent=2))
 
 
-def log_drafts(item: dict, topic: str, x_post: str, li_post: str,
-               posted_x: bool, posted_li: bool) -> None:
+def log_drafts(
+    item: dict, topic: str, x_post: str, li_post: str, posted_x: bool, posted_li: bool
+) -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     entry = (
         f"\n---\n\n# {date.today().isoformat()} — {item['title']}\n\n"
@@ -348,8 +350,7 @@ def log_drafts(item: dict, topic: str, x_post: str, li_post: str,
 # API error translation
 # ---------------------------------------------------------------------------
 
-NOTHING_LOST = ("Nothing was saved, so today's topic is still available when "
-                "you re-run.")
+NOTHING_LOST = "Nothing was saved, so today's topic is still available when you re-run."
 
 
 def friendly_api_error(exc: Exception) -> str:
@@ -374,14 +375,18 @@ def friendly_api_error(exc: Exception) -> str:
         )
 
     if isinstance(exc, anthropic.PermissionDeniedError):
-        return ("Your API key does not have permission for this request.\n\n"
-                f"  Check the key's workspace and scopes: {CONSOLE_KEYS}")
+        return (
+            "Your API key does not have permission for this request.\n\n"
+            f"  Check the key's workspace and scopes: {CONSOLE_KEYS}"
+        )
 
     if isinstance(exc, anthropic.RateLimitError):
-        return ("Rate limited by the Anthropic API.\n\n"
-                "  Wait a minute and re-run. If this keeps happening, check\n"
-                f"  your usage tier and limits: {CONSOLE_BILLING}\n\n"
-                f"  {NOTHING_LOST}")
+        return (
+            "Rate limited by the Anthropic API.\n\n"
+            "  Wait a minute and re-run. If this keeps happening, check\n"
+            f"  your usage tier and limits: {CONSOLE_BILLING}\n\n"
+            f"  {NOTHING_LOST}"
+        )
 
     if isinstance(exc, anthropic.BadRequestError):
         if "credit balance" in detail.lower():
@@ -394,22 +399,28 @@ def friendly_api_error(exc: Exception) -> str:
                 "  that page prevents the surprise next time.\n\n"
                 f"  {NOTHING_LOST}"
             )
-        return (f"The API rejected the request:\n\n  {detail}\n\n"
-                "  This usually means the model name or a tool definition in\n"
-                "  the script needs updating against current API docs.")
+        return (
+            f"The API rejected the request:\n\n  {detail}\n\n"
+            "  This usually means the model name or a tool definition in\n"
+            "  the script needs updating against current API docs."
+        )
 
     if isinstance(exc, anthropic.APIConnectionError):
-        return ("Could not reach the Anthropic API.\n\n"
-                "  Check your network connection, then re-run. If you are on\n"
-                "  a VPN or a corporate network, that is the first thing to\n"
-                f"  rule out.\n\n  {NOTHING_LOST}")
+        return (
+            "Could not reach the Anthropic API.\n\n"
+            "  Check your network connection, then re-run. If you are on\n"
+            "  a VPN or a corporate network, that is the first thing to\n"
+            f"  rule out.\n\n  {NOTHING_LOST}"
+        )
 
     if isinstance(exc, anthropic.APIStatusError):
         status = getattr(exc, "status_code", "unknown")
         if status in (500, 502, 503, 529):
-            return (f"The Anthropic API returned a server error ({status}).\n\n"
-                    "  This is on their end, not yours. Wait a few minutes and\n"
-                    f"  re-run.\n\n  {NOTHING_LOST}")
+            return (
+                f"The Anthropic API returned a server error ({status}).\n\n"
+                "  This is on their end, not yours. Wait a few minutes and\n"
+                f"  re-run.\n\n  {NOTHING_LOST}"
+            )
         return f"The Anthropic API returned an error ({status}):\n\n  {detail}"
 
     return f"Unexpected API error:\n\n  {detail}"
@@ -431,8 +442,7 @@ def parse_fields(text: str) -> dict:
     """
     parts = FIELD_PATTERN.split(text)
     if len(parts) < 3:
-        raise ValueError(
-            f"Model output was not in the expected format:\n{text[:500]}")
+        raise ValueError(f"Model output was not in the expected format:\n{text[:500]}")
     fields = {}
     for name, body in zip(parts[1::2], parts[2::2]):
         if name != "END":
@@ -454,16 +464,13 @@ def trim(text: str, limit: int) -> str:
     return cut[: cut.rfind(" ")].strip() + "…"
 
 
-def generate_item(client: anthropic.Anthropic, profile: dict, topic: str,
-                  used_urls: list) -> dict:
+def generate_item(client: anthropic.Anthropic, profile: dict, topic: str, used_urls: list) -> dict:
     try:
         response = client.messages.create(
             model=MODEL,
             max_tokens=3000,
-            messages=[{"role": "user",
-                       "content": build_prompt(profile, topic, used_urls)}],
-            tools=[{"type": "web_search_20250305", "name": "web_search",
-                    "max_uses": 5}],
+            messages=[{"role": "user", "content": build_prompt(profile, topic, used_urls)}],
+            tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 5}],
         )
     except anthropic.AnthropicError as exc:
         raise SystemExit(f"\n{friendly_api_error(exc)}\n") from None
@@ -477,20 +484,22 @@ def generate_item(client: anthropic.Anthropic, profile: dict, topic: str,
         raise SystemExit(
             f"\nThe model's response could not be parsed.\n\n  {exc}\n\n"
             f"  This is usually a one-off. Re-run and it will normally\n"
-            f"  succeed.\n\n  {NOTHING_LOST}\n") from None
+            f"  succeed.\n\n  {NOTHING_LOST}\n"
+        ) from None
 
-    missing = [k for k in ("url", "title", "tweet", "linkedin")
-               if not item.get(k)]
+    missing = [k for k in ("url", "title", "tweet", "linkedin") if not item.get(k)]
     if missing:
         raise SystemExit(
             f"\nThe model's response was missing: {', '.join(missing)}.\n\n"
-            f"  Re-run — this is usually a one-off.\n\n  {NOTHING_LOST}\n")
+            f"  Re-run — this is usually a one-off.\n\n  {NOTHING_LOST}\n"
+        )
 
     if item["url"] in used_urls:
         raise SystemExit(
             f"\nThe model picked an item already covered:\n  {item['url']}\n\n"
             "  Re-run, or try a different topic — this one may be quiet this\n"
-            f"  week.\n\n  {NOTHING_LOST}\n")
+            f"  week.\n\n  {NOTHING_LOST}\n"
+        )
 
     # X gets hard-trimmed (the platform enforces the limit anyway). LinkedIn is
     # only flagged — trimming from the end would eat the closing question and
@@ -498,9 +507,11 @@ def generate_item(client: anthropic.Anthropic, profile: dict, topic: str,
     item["tweet"] = trim(item["tweet"], MAX_TWEET_TEXT)
     item["linkedin"] = item["linkedin"].strip()
     if len(item["linkedin"]) > MAX_LINKEDIN_TEXT:
-        print(f"WARNING: LinkedIn draft is {len(item['linkedin'])} characters "
-              f"(ceiling {MAX_LINKEDIN_TEXT}) — shorten it before posting.",
-              file=sys.stderr)
+        print(
+            f"WARNING: LinkedIn draft is {len(item['linkedin'])} characters "
+            f"(ceiling {MAX_LINKEDIN_TEXT}) — shorten it before posting.",
+            file=sys.stderr,
+        )
     return item
 
 
@@ -512,23 +523,28 @@ def compose_posts(item: dict) -> tuple:
 # Optional publishing
 # ---------------------------------------------------------------------------
 
+
 def post_to_x(post: str) -> str:
     """Publish to X. Needs four user-context credentials; a Bearer token is
     app-only auth and cannot post."""
     try:
         import tweepy  # imported lazily so draft-only mode needs no dependency
     except ImportError:
-        raise SystemExit("\n--post needs tweepy. Install it with:\n\n"
-                         "  ~/.ai_post_venv/bin/pip install tweepy\n")
+        raise SystemExit(
+            "\n--post needs tweepy. Install it with:\n\n  ~/.ai_post_venv/bin/pip install tweepy\n"
+        )
 
-    creds = {k: os.environ.get(k) for k in
-             ("X_API_KEY", "X_API_SECRET", "X_ACCESS_TOKEN", "X_ACCESS_SECRET")}
+    creds = {
+        k: os.environ.get(k)
+        for k in ("X_API_KEY", "X_API_SECRET", "X_ACCESS_TOKEN", "X_ACCESS_SECRET")
+    }
     missing = [k for k, v in creds.items() if not v]
     if missing:
         raise SystemExit(
             f"\n--post needs these in {ENV_FILE}: {', '.join(missing)}\n\n"
             "  These come from an X developer app set to Read and Write. A\n"
-            "  Bearer token is app-only auth and cannot post on your behalf.\n")
+            "  Bearer token is app-only auth and cannot post on your behalf.\n"
+        )
 
     client = tweepy.Client(
         consumer_key=creds["X_API_KEY"],
@@ -544,7 +560,8 @@ def post_to_x(post: str) -> str:
             "  Common causes: the app is set to Read-only (change it, then\n"
             "  regenerate the access token — tokens keep the permissions they\n"
             "  were created with), or a duplicate post.\n"
-            "  The drafts were not saved; re-run to try again.\n") from None
+            "  The drafts were not saved; re-run to try again.\n"
+        ) from None
 
 
 def post_to_linkedin(post: str) -> str:
@@ -563,7 +580,8 @@ def post_to_linkedin(post: str) -> str:
             f"\n--post-linkedin needs LINKEDIN_ACCESS_TOKEN and "
             f"LINKEDIN_AUTHOR_URN in {ENV_FILE}.\n\n"
             "  Both come from an approved LinkedIn app with the\n"
-            "  w_member_social scope.\n")
+            "  w_member_social scope.\n"
+        )
 
     payload = {
         "author": author,
@@ -597,7 +615,8 @@ def post_to_linkedin(post: str) -> str:
             f"\nLinkedIn rejected the post ({exc.code}):\n\n  {body}\n\n"
             "  LinkedIn revises its API version header on a schedule — if\n"
             "  this is a 4xx, check the current value and set\n"
-            "  LINKEDIN_API_VERSION accordingly.\n") from None
+            "  LINKEDIN_API_VERSION accordingly.\n"
+        ) from None
     except urllib.error.URLError as exc:
         raise SystemExit(f"\nCould not reach LinkedIn: {exc.reason}\n") from None
 
@@ -606,26 +625,37 @@ def post_to_linkedin(post: str) -> str:
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Daily X and LinkedIn draft generator, driven by an "
-                    "author profile file and a topic you pick at run time.")
-    parser.add_argument("--topic",
-                        help="menu number, part of a menu entry, or free text; "
-                             "skips the interactive menu")
-    parser.add_argument("--random-topic", action="store_true",
-                        help="pick a topic from the menu at random")
-    parser.add_argument("--list-topics", action="store_true",
-                        help="show the topic menu and exit")
-    parser.add_argument("--profile", type=Path, default=PROFILE_FILE,
-                        help=f"author profile path (default: {PROFILE_FILE})")
-    parser.add_argument("--post", action="store_true",
-                        help="publish the X version instead of only drafting")
-    parser.add_argument("--post-linkedin", action="store_true",
-                        help="publish the LinkedIn version (needs an approved "
-                             "LinkedIn app)")
-    parser.add_argument("--history", action="store_true",
-                        help="show the last 10 items used, then exit")
+        "author profile file and a topic you pick at run time."
+    )
+    parser.add_argument(
+        "--topic",
+        help="menu number, part of a menu entry, or free text; skips the interactive menu",
+    )
+    parser.add_argument(
+        "--random-topic", action="store_true", help="pick a topic from the menu at random"
+    )
+    parser.add_argument("--list-topics", action="store_true", help="show the topic menu and exit")
+    parser.add_argument(
+        "--profile",
+        type=Path,
+        default=PROFILE_FILE,
+        help=f"author profile path (default: {PROFILE_FILE})",
+    )
+    parser.add_argument(
+        "--post", action="store_true", help="publish the X version instead of only drafting"
+    )
+    parser.add_argument(
+        "--post-linkedin",
+        action="store_true",
+        help="publish the LinkedIn version (needs an approved LinkedIn app)",
+    )
+    parser.add_argument(
+        "--history", action="store_true", help="show the last 10 items used, then exit"
+    )
     args = parser.parse_args()
 
     load_env_file()
@@ -649,7 +679,8 @@ def main() -> None:
             f"\nNo ANTHROPIC_API_KEY found (checked {ENV_FILE} and the "
             f"environment).\n\n  Create one at {CONSOLE_KEYS}, then:\n\n"
             f"    echo 'export ANTHROPIC_API_KEY=sk-ant-...' > {ENV_FILE}\n"
-            f"    chmod 600 {ENV_FILE}\n")
+            f"    chmod 600 {ENV_FILE}\n"
+        )
 
     topic = choose_topic(topics, args.topic, args.random_topic)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -664,15 +695,17 @@ def main() -> None:
     tweet_id = post_to_x(x_post) if args.post else ""
     li_id = post_to_linkedin(li_post) if args.post_linkedin else ""
 
-    history.append({
-        "date": date.today().isoformat(),
-        "topic": topic,
-        "url": item["url"],
-        "title": item["title"],
-        "posted_x": bool(tweet_id),
-        "posted_linkedin": bool(li_id),
-        "tweet_id": tweet_id,
-    })
+    history.append(
+        {
+            "date": date.today().isoformat(),
+            "topic": topic,
+            "url": item["url"],
+            "title": item["title"],
+            "posted_x": bool(tweet_id),
+            "posted_linkedin": bool(li_id),
+            "tweet_id": tweet_id,
+        }
+    )
     save_history(history)
     log_drafts(item, topic, x_post, li_post, bool(tweet_id), bool(li_id))
     log_run(f"OK — [{topic}] {item['title']} ({item['url']})")
