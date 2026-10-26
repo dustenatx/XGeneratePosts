@@ -37,8 +37,6 @@ import urllib.request
 from datetime import date, datetime
 from pathlib import Path
 
-import anthropic
-
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -359,6 +357,8 @@ def friendly_api_error(exc: Exception) -> str:
     The raw exceptions are accurate but buried in a traceback; every case here
     has a specific thing the user should go do about it.
     """
+    import anthropic  # only reached after AnthropicProvider imported it
+
     detail = str(exc)
 
     if isinstance(exc, anthropic.AuthenticationError):
@@ -427,6 +427,51 @@ def friendly_api_error(exc: Exception) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Providers — each takes the assembled prompt and returns the model's raw text
+# ---------------------------------------------------------------------------
+
+
+class AnthropicProvider:
+    """Claude with Anthropic's server-side web_search tool. Paid."""
+
+    name = "anthropic"
+
+    def __init__(self) -> None:
+        self.model = MODEL
+
+    def require_credentials(self) -> None:
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            raise SystemExit(
+                f"\nNo ANTHROPIC_API_KEY found (checked {ENV_FILE} and the "
+                f"environment).\n\n  Create one at {CONSOLE_KEYS}, then:\n\n"
+                f"    echo 'export ANTHROPIC_API_KEY=sk-ant-...' > {ENV_FILE}\n"
+                f"    chmod 600 {ENV_FILE}\n"
+            )
+
+    def generate(self, prompt: str) -> str:
+        try:
+            import anthropic  # imported lazily so other providers need no SDK
+        except ImportError:
+            raise SystemExit(
+                "\n--provider anthropic needs the anthropic package. Install it with:\n\n"
+                "  ~/.ai_post_venv/bin/pip install anthropic\n"
+            ) from None
+
+        try:
+            response = anthropic.Anthropic().messages.create(
+                model=self.model,
+                max_tokens=3000,
+                messages=[{"role": "user", "content": prompt}],
+                tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 5}],
+            )
+        except anthropic.AnthropicError as exc:
+            raise SystemExit(f"\n{friendly_api_error(exc)}\n") from None
+
+        # Web-search responses contain several block types; keep only text blocks.
+        return "\n".join(b.text for b in response.content if b.type == "text")
+
+
+# ---------------------------------------------------------------------------
 # Generation
 # ---------------------------------------------------------------------------
 
@@ -464,19 +509,8 @@ def trim(text: str, limit: int) -> str:
     return cut[: cut.rfind(" ")].strip() + "…"
 
 
-def generate_item(client: anthropic.Anthropic, profile: dict, topic: str, used_urls: list) -> dict:
-    try:
-        response = client.messages.create(
-            model=MODEL,
-            max_tokens=3000,
-            messages=[{"role": "user", "content": build_prompt(profile, topic, used_urls)}],
-            tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 5}],
-        )
-    except anthropic.AnthropicError as exc:
-        raise SystemExit(f"\n{friendly_api_error(exc)}\n") from None
-
-    # Web-search responses contain several block types; keep only text blocks.
-    text = "\n".join(b.text for b in response.content if b.type == "text")
+def generate_item(provider, profile: dict, topic: str, used_urls: list) -> dict:
+    text = provider.generate(build_prompt(profile, topic, used_urls))
 
     try:
         item = parse_fields(text)
@@ -674,13 +708,8 @@ def main() -> None:
             print(f"{i:>2}. {topic}")
         return
 
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        raise SystemExit(
-            f"\nNo ANTHROPIC_API_KEY found (checked {ENV_FILE} and the "
-            f"environment).\n\n  Create one at {CONSOLE_KEYS}, then:\n\n"
-            f"    echo 'export ANTHROPIC_API_KEY=sk-ant-...' > {ENV_FILE}\n"
-            f"    chmod 600 {ENV_FILE}\n"
-        )
+    provider = AnthropicProvider()
+    provider.require_credentials()
 
     topic = choose_topic(topics, args.topic, args.random_topic)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -689,7 +718,7 @@ def main() -> None:
     used_urls = [h["url"] for h in history]
 
     print(f"\nSearching: {topic}\n")
-    item = generate_item(anthropic.Anthropic(), profile, topic, used_urls)
+    item = generate_item(provider, profile, topic, used_urls)
     x_post, li_post = compose_posts(item)
 
     tweet_id = post_to_x(x_post) if args.post else ""
