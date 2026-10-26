@@ -247,14 +247,14 @@ def topic_menu(profile: dict) -> list:
     return topics or list(TOPIC_CATALOG)
 
 
-def choose_topic(topics: list, requested: str = None, pick_random: bool = False) -> str:
+def choose_topic(topics: list, requested: str | None = None, pick_random: bool = False) -> str:
     """Resolve the topic from --topic, --random-topic, or an interactive menu.
 
     --topic accepts a menu number, a case-insensitive substring of a menu
     entry, or free text that is not in the menu at all.
     """
     if pick_random:
-        return random.choice(topics)
+        return random.choice(topics)  # noqa: S311 - random topic choice, not security
 
     if requested:
         if requested.isdigit() and 1 <= int(requested) <= len(topics):
@@ -281,7 +281,7 @@ def choose_topic(topics: list, requested: str = None, pick_random: bool = False)
     if not answer:
         raise SystemExit("No topic chosen.")
     if answer.lower() == "r":
-        return random.choice(topics)
+        return random.choice(topics)  # noqa: S311 - random topic choice, not security
     if answer.isdigit() and 1 <= int(answer) <= len(topics):
         return topics[int(answer) - 1]
     return answer
@@ -444,7 +444,7 @@ def parse_fields(text: str) -> dict:
     if len(parts) < 3:
         raise ValueError(f"Model output was not in the expected format:\n{text[:500]}")
     fields = {}
-    for name, body in zip(parts[1::2], parts[2::2]):
+    for name, body in zip(parts[1::2], parts[2::2], strict=False):
         if name != "END":
             fields[name.lower()] = body.strip()
     return fields
@@ -532,7 +532,7 @@ def post_to_x(post: str) -> str:
     except ImportError:
         raise SystemExit(
             "\n--post needs tweepy. Install it with:\n\n  ~/.ai_post_venv/bin/pip install tweepy\n"
-        )
+        ) from None
 
     creds = {
         k: os.environ.get(k)
@@ -607,7 +607,7 @@ def post_to_linkedin(post: str) -> str:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request) as response:
+        with urllib.request.urlopen(request) as response:  # noqa: S310 - hardcoded https://api.linkedin.com URL
             return response.headers.get("x-restli-id", "posted")
     except urllib.error.HTTPError as exc:
         body = exc.read().decode()[:300]
