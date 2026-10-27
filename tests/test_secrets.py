@@ -163,5 +163,27 @@ def test_provider_response_over_2_mb_is_refused(web, groq):
     assert "larger than 2,000,000 bytes" in exc.value.code
 
 
+def test_env_file_path_is_read_at_call_time(monkeypatch, tmp_path):
+    """A patched ENV_FILE is read, never the real ~/.ai_post_env."""
+    var = "XGP_TEST_ENV_FILE_VALUE"
+    monkeypatch.setenv(var, "placeholder")
+    monkeypatch.delenv(var)  # restored to unset after the test
+    env_file = tmp_path / "test.env"
+    env_file.write_text(f"export {var}='from the patched file'\n")
+    monkeypatch.setattr(d, "ENV_FILE", env_file)
+    read = []
+    real_read_text = d.Path.read_text
+
+    def spy(self, *args, **kwargs):
+        read.append(self)
+        return real_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(d.Path, "read_text", spy)
+    d.load_env_file()
+    assert d.os.environ[var] == "from the patched file"
+    assert read == [env_file]
+    assert d.Path.home() / ".ai_post_env" not in read
+
+
 def test_redact_ignores_empty_and_short_values():
     assert d.redact("abc", "", "ab") == "abc"

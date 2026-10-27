@@ -258,9 +258,11 @@ one sentence: why you picked it
 # ---------------------------------------------------------------------------
 
 
-def load_env_file(path: Path = ENV_FILE) -> None:
+def load_env_file(path: Path | None = None) -> None:
     """Load KEY=value lines (with or without a leading 'export ') into
-    os.environ. Variables already set in the environment win."""
+    os.environ. Variables already set in the environment win. ENV_FILE is
+    read at call time, so tests can point it at a throwaway file."""
+    path = ENV_FILE if path is None else path
     if not path.exists():
         return
     for line in path.read_text().splitlines():
