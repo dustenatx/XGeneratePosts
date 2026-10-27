@@ -277,6 +277,16 @@ make sbom    # CycloneDX SBOM of the runtime dependencies, to build/sbom.cdx.jso
 make install-check  # build, install into a clean venv, check xgp --help and xgp init
 ```
 
+### Security checks
+
+Every pull request to master runs three more checks (`.github/workflows/security.yml`):
+`gitleaks` scans the git history for secrets, `semgrep` runs the `p/default`
+rules, and `pip-audit` runs `make audit`. gitleaks and Semgrep findings also
+appear in the repo's Security tab. `pip-audit (daily)` runs the same audit on
+master every day, so an advisory against a locked version shows up between
+pull requests. Dependabot proposes weekly updates for `uv.lock` and the
+pinned actions.
+
 ## Design notes
 
 **Why the topic is chosen per run rather than fixed.** A single hardcoded
