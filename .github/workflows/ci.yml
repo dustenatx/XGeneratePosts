@@ -37,3 +37,9 @@ jobs:
             git diff --stat FETCH_HEAD -- tests/acceptance
             exit 1
           fi
+      # No lockfile until v3.1: pytest is pinned exactly, and --exclude-newer
+      # fixes the date its own dependencies resolve against.
+      - name: Expat version
+        run: uv run --no-project --python 3.14 python -c "import pyexpat; print(pyexpat.EXPAT_VERSION)"
+      - name: Tests (pytest)
+        run: uvx --python 3.14 --exclude-newer 2026-10-20 pytest@9.1.1

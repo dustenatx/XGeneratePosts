@@ -116,3 +116,17 @@ guess. Common entries:
 *A pool to draw from, not a fixed set. Cover every topic you listed.*
 
 #YourTag #YourTag #YourTag
+
+## Feeds
+
+*Optional, and used only with `--search rss`: the RSS or Atom feeds to pick
+today's item from, instead of a web search.*
+
+One feed URL per line; bullets are stripped. Only `https://` feeds are read,
+and a feed that redirects to plain `http://` is skipped. The newest 3 entries
+of each feed are offered (set `AI_POST_RSS_PER_FEED` to change that), so
+high-volume feeds don't crowd out the rest. Prefer original vendor and project
+blogs over aggregators.
+
+- https://blog.example.com/feed.xml
+- https://news.example.org/atom.xml
