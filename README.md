@@ -234,7 +234,7 @@ In the repo:
 |---|---|
 | `daily_post.py` | The generator |
 | `author_profile.example.md` | Scaffold to copy and fill in |
-| `tests/` | Unit tests, run with `uvx --python 3.14 pytest@9.1.1`; no network needed |
+| `tests/` | Unit and acceptance tests, run with `make check`; no network needed |
 | `docs/decisions.md` | Owner decisions and recorded departures |
 
 In your data directory (`~/XPosts` by default, override with
@@ -246,6 +246,19 @@ In your data directory (`~/XPosts` by default, override with
 | `drafts.md` | Every draft generated, with date, topic, title, rationale, and the provider and search source used |
 | `history.json` | URLs and titles already used — dedup across runs — with the provider, model and search source of each |
 | `run.log` | One timestamped line per run, ending with the provider and search source |
+
+## Development
+
+The dev tools (pytest, pytest-cov, ruff, mypy, pip-audit) are pinned in
+`uv.lock`; the script itself still needs nothing beyond the standard library.
+With [uv](https://docs.astral.sh/uv/) installed:
+
+```bash
+uv sync      # Python from .python-version, plus the dev tools from uv.lock
+make check   # ruff check, ruff format --check, mypy, pytest with coverage
+make audit   # pip-audit against the locked dependencies
+make sbom    # CycloneDX SBOM of the runtime dependencies, to build/sbom.cdx.json
+```
 
 ## Design notes
 

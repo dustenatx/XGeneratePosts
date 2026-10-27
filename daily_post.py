@@ -291,7 +291,8 @@ def load_profile(path: Path) -> dict:
             "fill it in — it is what makes the posts sound like you."
         )
 
-    sections, current = {}, None
+    sections: dict[str, list[str]] = {}
+    current: str | None = None
     for line in path.read_text().splitlines():
         heading = re.match(r"^##\s+(.+?)\s*$", line)
         if heading:
@@ -1026,7 +1027,7 @@ def parse_feed(data: bytes) -> list:
     The caller has already checked the Expat version (require_expat).
     """
     root = ET.fromstring(data)  # noqa: S314 - Expat >= 2.7.2 enforced by require_expat
-    entries = []
+    entries: list[dict] = []
     if root.tag == "rss":
         for item in root.iterfind("./channel/item"):
             entries.append(
@@ -1108,7 +1109,7 @@ class RssSearch:
         self.feeds = parse_feeds(profile)
         self.per_feed = rss_per_feed()
         self.max_entries = rss_max_entries()
-        self.links = set()
+        self.links: set[str] = set()
 
     def candidates(self, used_urls: list, used_titles: list, topic: str) -> str:
         picked = []
