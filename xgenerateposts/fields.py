@@ -5,7 +5,7 @@ import re
 FIELD_PATTERN = re.compile(r"^===([A-Z]+)===\s*$", re.MULTILINE)
 
 
-def parse_fields(text: str) -> dict:
+def parse_fields(text: str) -> dict[str, str]:
     """Parse the delimited model response into a dict.
 
     Delimiters rather than JSON: post text routinely contains quotes,
@@ -36,5 +36,5 @@ def trim(text: str, limit: int) -> str:
     return cut[: cut.rfind(" ")].strip() + "…"
 
 
-def compose_posts(item: dict) -> tuple:
+def compose_posts(item: dict[str, str]) -> tuple[str, str]:
     return f"{item['tweet']}\n{item['url']}", f"{item['linkedin']}\n\n{item['url']}"

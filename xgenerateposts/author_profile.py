@@ -34,7 +34,7 @@ PROFILE_SECTIONS = {
 }
 
 
-def parse_profile(text: str, path: Path) -> dict:
+def parse_profile(text: str, path: Path) -> dict[str, str]:
     """Parse the author profile into {section_name: body}.
 
     Sections are '## Heading' blocks. Heading names are matched
@@ -64,7 +64,7 @@ def parse_profile(text: str, path: Path) -> dict:
     return parsed
 
 
-def topic_menu(profile: dict) -> list:
+def topic_menu(profile: dict[str, str]) -> list[str]:
     """Topics from the profile's '## Topics' section, else the built-in
     catalog. One topic per line; '-' and '*' bullets and numbering are
     stripped."""
@@ -77,7 +77,7 @@ def topic_menu(profile: dict) -> list:
     return topics or list(TOPIC_CATALOG)
 
 
-def match_topic(topics: list, requested: str) -> str:
+def match_topic(topics: list[str], requested: str) -> str:
     """--topic as a menu number, a case-insensitive substring of a menu
     entry, or free text that is not in the menu at all."""
     if requested.isdigit() and 1 <= int(requested) <= len(topics):

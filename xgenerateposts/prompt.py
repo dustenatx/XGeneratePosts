@@ -124,10 +124,10 @@ one sentence: why you picked it
 
 
 def build_prompt(
-    profile: dict,
+    profile: dict[str, str],
     topic: str,
-    used_urls: list,
-    used_titles: list,
+    used_urls: list[str],
+    used_titles: list[str],
     candidates: str | None = None,
 ) -> str:
     """Assemble the prompt. `candidates` is the RSS entry block; None means

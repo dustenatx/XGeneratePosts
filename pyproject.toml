@@ -44,8 +44,35 @@ select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "RUF", "T20"]
 "tests/**" = ["S101"]
 
 [tool.mypy]
-# Default level until PR 2 splits the code into modules (R28).
 files = ["xgenerateposts", "daily_post.py"]
+warn_redundant_casts = true  # part of strict, but a global-only option
+
+# R28: strict on the pure-logic modules, which do no I/O. mypy's own
+# `strict` can't be set per module, so its flags are listed one by one.
+# Default level, not strict: config (environment and the env file), storage
+# (files), net, providers, search and publish (network, and the optional
+# untyped anthropic and tweepy SDKs), cli (terminal) and the daily_post.py
+# shim.
+[[tool.mypy.overrides]]
+module = [
+    "xgenerateposts.author_profile",
+    "xgenerateposts.dedup",
+    "xgenerateposts.feeds",
+    "xgenerateposts.fields",
+    "xgenerateposts.prompt",
+]
+disallow_any_generics = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+warn_unused_ignores = true
+warn_return_any = true
+no_implicit_reexport = true
+strict_equality = true
+extra_checks = true
 
 # Optional SDKs, imported lazily only by --provider anthropic and --post; not installed in dev.
 [[tool.mypy.overrides]]
