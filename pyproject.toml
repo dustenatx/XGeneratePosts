@@ -30,6 +30,15 @@ select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "RUF", "T20"]
 "daily_post.py" = ["T201"]
 "tests/**" = ["S101"]
 
+[tool.mypy]
+# Default level until PR 2 splits the code into modules (R28).
+files = ["daily_post.py"]
+
+# Optional SDKs, imported lazily only by --provider anthropic and --post; not installed in dev.
+[[tool.mypy.overrides]]
+module = ["anthropic", "anthropic.*", "tweepy", "tweepy.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
