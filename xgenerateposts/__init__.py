@@ -12,8 +12,8 @@ The menu comes from the '## Topics' section of your author profile if you
 have one, otherwise from TOPIC_CATALOG below.
 
 What makes the posts sound like YOU is an author profile file kept outside
-this repo (default: ~/XPosts/author_profile.md). See author_profile.example.md
-for a scaffold and instructions.
+this repo (default: ~/XPosts/author_profile.md). `xgp init` copies the
+scaffold, author_profile.example.md in this package, there to fill in.
 
 Default behavior is draft-only: both posts are printed and appended to
 drafts.md for you to review and post yourself. Optional flags can publish to

@@ -71,7 +71,7 @@ directory and fill it in:
 
 ```bash
 mkdir -p ~/XPosts
-cp author_profile.example.md ~/XPosts/author_profile.md
+cp xgenerateposts/author_profile.example.md ~/XPosts/author_profile.md
 ```
 
 The scaffold explains each section:
@@ -234,7 +234,7 @@ In the repo:
 | File | Purpose |
 |---|---|
 | `daily_post.py` | The generator |
-| `author_profile.example.md` | Scaffold to copy and fill in |
+| `xgenerateposts/author_profile.example.md` | Scaffold that `xgp init` copies; fill it in |
 | `tests/` | Unit and acceptance tests, run with `make check`; no network needed |
 | `docs/decisions.md` | Owner decisions and recorded departures |
 

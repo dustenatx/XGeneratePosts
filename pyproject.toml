@@ -9,6 +9,13 @@ license-files = ["LICENSE"]
 # Standard library only at runtime (v3 R5).
 dependencies = []
 
+[project.scripts]
+xgp = "xgenerateposts.cli:main"
+
+[build-system]
+requires = ["uv_build==0.13.1"]
+build-backend = "uv_build"
+
 [dependency-groups]
 dev = [
     "mypy==2.4.0",
@@ -17,6 +24,11 @@ dev = [
     "pytest-cov==7.1.0",
     "ruff==0.16.10",
 ]
+
+[tool.uv.build-backend]
+# Flat layout: the package sits at the repo root, so python daily_post.py
+# imports it without an install (R30).
+module-root = ""
 
 [tool.ruff]
 line-length = 100

@@ -2,8 +2,10 @@
 directory."""
 
 import json
+import os
 import sys
 from datetime import date, datetime
+from importlib import resources
 from pathlib import Path
 
 from xgenerateposts import config
@@ -29,10 +31,33 @@ def load_profile(path: Path) -> dict:
     if not path.exists():
         raise SystemExit(
             f"No author profile at {path}\n"
-            "Copy author_profile.example.md from the repo to that path and "
-            "fill it in — it is what makes the posts sound like you."
+            "Run 'xgp init' (from a repo clone: 'python daily_post.py init') to create one in "
+            "the data directory, or copy xgenerateposts/author_profile.example.md to that "
+            "path. Then fill it in — it is what makes the posts sound like you."
         )
     return parse_profile(path.read_text(), path)
+
+
+def create_profile() -> Path:
+    """Copy the example profile to the data directory as author_profile.md,
+    with mode 600 (R33). Never overwrites: raises FileExistsError if a file
+    (or a symlink) is already there.
+
+    A missing data directory is created with mode 700, since it holds the
+    profile, drafts and history. An existing one keeps its mode.
+    """
+    example = resources.files("xgenerateposts").joinpath(config.EXAMPLE_PROFILE).read_bytes()
+    data = config.data_dir()
+    if not data.exists():
+        data.parent.mkdir(parents=True, exist_ok=True)
+        data.mkdir(mode=0o700)
+        data.chmod(0o700)  # mkdir's mode is reduced by the umask
+    path = config.profile_file()
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "wb") as f:
+        f.write(example)
+    path.chmod(0o600)  # os.open's mode is reduced by the umask
+    return path
 
 
 def load_history() -> list:

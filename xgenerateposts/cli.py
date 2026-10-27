@@ -155,7 +155,15 @@ def run() -> None:
     parser.add_argument(
         "--history", action="store_true", help="show the last 10 items used, then exit"
     )
+    commands = parser.add_subparsers(dest="command", title="commands", metavar="COMMAND")
+    commands.add_parser(
+        "init", help="create the data directory and an author profile to fill in, then exit"
+    )
     args = parser.parse_args()
+
+    if args.command == "init":
+        init()
+        return
 
     if args.history:
         for h in load_history()[-10:]:
@@ -221,6 +229,28 @@ def run() -> None:
     print(f"{rule}")
     print(li_post)
     print(f"\n[{len(item['linkedin'])} characters] Saved to {config.drafts_file()}")
+
+
+def init() -> None:
+    """xgp init: create the data directory and an author profile to fill in.
+
+    An existing profile is never touched, and nothing is written to run.log,
+    so a refused init changes nothing in the data directory.
+    """
+    try:
+        path = storage.create_profile()
+    except FileExistsError:
+        print(
+            f"An author profile already exists at {config.profile_file()}; "
+            "xgp init left it unchanged.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1) from None
+    print(
+        f"Created {path} from the example profile (mode 600).\n"
+        "Fill in at least ## Beat and ## Voice, then add GROQ_API_KEY to "
+        f"{config.env_file()} (see the README)."
+    )
 
 
 def main() -> None:

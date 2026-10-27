@@ -41,6 +41,9 @@ DEFAULT_RSS_MAX_ENTRIES = 20
 MAX_TWEET_TEXT = 255  # 280 minus ~24 chars X reserves for a t.co link
 MAX_LINKEDIN_TEXT = 1100  # hard ceiling; the prompt targets 750-950
 
+# Shipped inside the package; xgp init copies it to the data directory (R33).
+EXAMPLE_PROFILE = "author_profile.example.md"
+
 NOTHING_LOST = "Nothing was saved, so today's topic is still available when you re-run."
 
 # The env file can't name its own location, so AI_POST_ENV_FILE comes only
