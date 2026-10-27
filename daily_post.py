@@ -88,6 +88,12 @@ SEARCH_SOURCES = ("native", "rss")
 NATIVE_SEARCH_PROVIDERS = ("anthropic", "groq")  # default to native; others to rss
 FEED_TIMEOUT = 15.0  # seconds per feed request (R20)
 DEFAULT_RSS_PER_FEED = 3  # newest entries per feed, override with AI_POST_RSS_PER_FEED
+# Total candidates sent, best topic match first, override with
+# AI_POST_RSS_MAX_ENTRIES. Keeps one call under Groq's free 8,000 TPM (R22).
+DEFAULT_RSS_MAX_ENTRIES = 20
+STOP_WORDS = frozenset(
+    {"and", "the", "for", "with", "from", "into", "about", "that", "this", "are", "its", "how"}
+)
 RSS_SUMMARY_CHARS = 300
 # Expat below 2.7.2 may be open to billion-laughs, quadratic-blowup and
 # large-token attacks (https://docs.python.org/3/library/xml.html#xml-security).
@@ -894,7 +900,7 @@ class NativeSearch:
 
     name = "native"
 
-    def candidates(self, used_urls: list, used_titles: list) -> str | None:
+    def candidates(self, used_urls: list, used_titles: list, topic: str) -> str | None:
         return None
 
 
@@ -911,15 +917,21 @@ def require_expat() -> None:
         )
 
 
-def rss_per_feed() -> int:
-    raw = os.environ.get("AI_POST_RSS_PER_FEED", "").strip()
+def env_whole_number(var: str, default: int) -> int:
+    raw = os.environ.get(var, "").strip()
     if not raw:
-        return DEFAULT_RSS_PER_FEED
+        return default
     if not raw.isdigit() or int(raw) < 1:
-        raise SystemExit(
-            f"\nAI_POST_RSS_PER_FEED must be a whole number of 1 or more; got {raw!r}.\n"
-        )
+        raise SystemExit(f"\n{var} must be a whole number of 1 or more; got {raw!r}.\n")
     return int(raw)
+
+
+def rss_per_feed() -> int:
+    return env_whole_number("AI_POST_RSS_PER_FEED", DEFAULT_RSS_PER_FEED)
+
+
+def rss_max_entries() -> int:
+    return env_whole_number("AI_POST_RSS_MAX_ENTRIES", DEFAULT_RSS_MAX_ENTRIES)
 
 
 def warn(message: str) -> None:
@@ -1042,6 +1054,24 @@ def newest(entries: list, limit: int) -> list:
     return sorted(entries, key=lambda e: e["date"] or floor, reverse=True)[:limit]
 
 
+def words(text: str) -> set:
+    """Lower-cased words of 3+ characters, stop words removed (R22)."""
+    return {w for w in re.findall(r"[a-z0-9]+", text.lower()) if len(w) >= 3} - STOP_WORDS
+
+
+def ranked(entries: list, topic: str, limit: int) -> list:
+    """Most topic words in title or summary first, then newest first; undated
+    entries go last within a score, in feed order (R22)."""
+    wanted = words(topic)
+    floor = datetime.min.replace(tzinfo=UTC)
+
+    def key(e: dict) -> tuple:
+        found = words(f"{clean_text(e['title'])} {clean_text(e['summary'])}")
+        return len(wanted & found), e["date"] or floor
+
+    return sorted(entries, key=key, reverse=True)[:limit]
+
+
 class RssSearch:
     """Candidate items from the feeds in the profile's '## Feeds' section."""
 
@@ -1051,9 +1081,10 @@ class RssSearch:
         require_expat()
         self.feeds = parse_feeds(profile)
         self.per_feed = rss_per_feed()
+        self.max_entries = rss_max_entries()
         self.links = set()
 
-    def candidates(self, used_urls: list, used_titles: list) -> str:
+    def candidates(self, used_urls: list, used_titles: list, topic: str) -> str:
         picked = []
         for url in self.feeds:
             try:
@@ -1077,6 +1108,7 @@ class RssSearch:
                 f"\nNo feed yielded a new entry ({len(self.feeds)} tried). "
                 f"The reasons are in {LOG_FILE}.\n\n  {NOTHING_LOST}\n"
             )
+        picked = ranked(picked, topic, self.max_entries)
         self.links = {e["link"] for e in picked}
         return format_candidates(picked)
 
@@ -1140,7 +1172,7 @@ def trim(text: str, limit: int) -> str:
 def generate_item(
     provider, search, profile: dict, topic: str, used_urls: list, used_titles: list
 ) -> dict:
-    candidates = search.candidates(used_urls, used_titles)
+    candidates = search.candidates(used_urls, used_titles, topic)
     prompt = build_prompt(profile, topic, used_urls, used_titles, candidates)
     text = provider.generate(prompt, native_search=candidates is None)
 
