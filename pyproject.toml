@@ -1,3 +1,23 @@
+[project]
+name = "xgenerateposts"
+version = "3.1.0.dev0"
+description = "Drafts X and LinkedIn posts from an author profile and a topic chosen at run time."
+readme = "README.md"
+requires-python = ">=3.14"
+license = "MIT"
+license-files = ["LICENSE"]
+# Standard library only at runtime (v3 R5).
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "mypy==2.4.0",
+    "pip-audit==2.10.1",
+    "pytest==9.1.1",
+    "pytest-cov==7.1.0",
+    "ruff==0.16.10",
+]
+
 [tool.ruff]
 line-length = 100
 target-version = "py314"
