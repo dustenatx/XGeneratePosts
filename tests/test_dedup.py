@@ -2,8 +2,8 @@
 
 import pytest
 
-import daily_post as d
 from tests.conftest import MODEL_OUTPUT
+from xgenerateposts import cli, dedup, search
 
 
 class CannedProvider:
@@ -23,15 +23,15 @@ PROFILE = {"beat": "b", "voice": "v"}
 
 
 def test_normalize_title_casefolds_and_collapses_whitespace():
-    assert d.normalize_title("  A  Real\tRELEASE\n") == "a real release"
+    assert dedup.normalize_title("  A  Real\tRELEASE\n") == "a real release"
 
 
 def test_title_match_with_different_url_is_rejected():
     history_titles = ["a real   release"]
     with pytest.raises(SystemExit) as exc:
-        d.generate_item(
+        cli.generate_item(
             CannedProvider(MODEL_OUTPUT),
-            d.NativeSearch(),
+            search.NativeSearch(),
             PROFILE,
             "topic",
             ["https://other.example/same-story"],
@@ -42,9 +42,9 @@ def test_title_match_with_different_url_is_rejected():
 
 def test_url_match_is_rejected():
     with pytest.raises(SystemExit):
-        d.generate_item(
+        cli.generate_item(
             CannedProvider(MODEL_OUTPUT),
-            d.NativeSearch(),
+            search.NativeSearch(),
             PROFILE,
             "topic",
             ["https://vendor.example/post"],
@@ -54,8 +54,8 @@ def test_url_match_is_rejected():
 
 def test_new_item_passes_and_prompt_lists_used_urls_and_titles():
     provider = CannedProvider(MODEL_OUTPUT)
-    item = d.generate_item(
-        provider, d.NativeSearch(), PROFILE, "topic", ["https://old.example/1"], ["Old Story"]
+    item = cli.generate_item(
+        provider, search.NativeSearch(), PROFILE, "topic", ["https://old.example/1"], ["Old Story"]
     )
     assert item["url"] == "https://vendor.example/post"
     assert "- https://old.example/1" in provider.prompts[0]
@@ -67,4 +67,4 @@ def test_used_from_reads_history():
         {"url": "https://a", "title": "A"},
         {"url": "https://b", "title": "B", "topic": "t"},
     ]
-    assert d.used_from(history) == (["https://a", "https://b"], ["A", "B"])
+    assert dedup.used_from(history) == (["https://a", "https://b"], ["A", "B"])

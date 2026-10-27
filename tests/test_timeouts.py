@@ -4,8 +4,8 @@ import urllib.error
 
 import pytest
 
-import daily_post as d
 from tests.conftest import MODEL_OUTPUT, SENTINEL_KEY, completion
+from xgenerateposts import config, providers, search
 
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
@@ -13,12 +13,12 @@ GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 @pytest.fixture
 def groq(monkeypatch):
     monkeypatch.setenv("GROQ_API_KEY", SENTINEL_KEY)
-    return d.GroqProvider()
+    return providers.GroqProvider()
 
 
 def test_feed_requests_use_15_seconds(web):
     web.add("https://feeds.example/a.xml", b"<rss><channel/></rss>")
-    d.fetch_feed("https://feeds.example/a.xml")
+    search.fetch_feed("https://feeds.example/a.xml")
     assert web.requests[0].timeout == 15
 
 
@@ -39,7 +39,7 @@ def test_provider_timeout_is_configurable(monkeypatch, web, groq):
 def test_bad_provider_timeout_exits(monkeypatch, value):
     monkeypatch.setenv("AI_POST_PROVIDER_TIMEOUT", value)
     with pytest.raises(SystemExit) as exc:
-        d.provider_timeout()
+        config.provider_timeout()
     assert "AI_POST_PROVIDER_TIMEOUT" in exc.value.code
 
 

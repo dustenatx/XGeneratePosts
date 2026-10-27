@@ -26,13 +26,14 @@ target-version = "py314"
 select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "RUF", "T20"]
 
 [tool.ruff.lint.per-file-ignores]
-# daily_post.py is a command-line tool; print() is its user interface.
-"daily_post.py" = ["T201"]
+# A command-line tool: print() is its user interface, in these two modules only.
+"xgenerateposts/cli.py" = ["T201"]
+"xgenerateposts/storage.py" = ["T201"]
 "tests/**" = ["S101"]
 
 [tool.mypy]
 # Default level until PR 2 splits the code into modules (R28).
-files = ["daily_post.py"]
+files = ["xgenerateposts", "daily_post.py"]
 
 # Optional SDKs, imported lazily only by --provider anthropic and --post; not installed in dev.
 [[tool.mypy.overrides]]

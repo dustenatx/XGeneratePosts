@@ -4,8 +4,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-import daily_post as d
 from tests.test_rss import FEED_A, FEED_B, PROFILE, dated, rss
+from xgenerateposts import config, feeds, search
 
 
 def entry(title, day=None, summary=""):
@@ -27,7 +27,7 @@ def test_more_topic_words_rank_first():
         entry("Kubernetes release", 10),
         entry("Kubernetes security release", 5),
     ]
-    assert titles(d.ranked(entries, "Kubernetes security", 20)) == [
+    assert titles(feeds.ranked(entries, "Kubernetes security", 20)) == [
         "Kubernetes security release",
         "Kubernetes release",
         "Nothing relevant",
@@ -36,7 +36,7 @@ def test_more_topic_words_rank_first():
 
 def test_summary_counts_and_case_is_ignored():
     entries = [entry("Plain", 1, summary="All about KUBERNETES"), entry("Other", 2)]
-    assert titles(d.ranked(entries, "kubernetes", 20)) == ["Plain", "Other"]
+    assert titles(feeds.ranked(entries, "kubernetes", 20)) == ["Plain", "Other"]
 
 
 def test_ties_break_newest_first_and_undated_go_last():
@@ -47,27 +47,33 @@ def test_ties_break_newest_first_and_undated_go_last():
         entry("new", 9),
         entry("mid", 5),
     ]
-    assert titles(d.ranked(entries, "", 20)) == ["new", "mid", "old", "undated one", "undated two"]
+    assert titles(feeds.ranked(entries, "", 20)) == [
+        "new",
+        "mid",
+        "old",
+        "undated one",
+        "undated two",
+    ]
 
 
 def test_ties_within_a_score_break_by_date():
     entries = [entry("cloud old", 1), entry("other", 30), entry("cloud new", 9)]
-    assert titles(d.ranked(entries, "Cloud", 20)) == ["cloud new", "cloud old", "other"]
+    assert titles(feeds.ranked(entries, "Cloud", 20)) == ["cloud new", "cloud old", "other"]
 
 
 def test_each_distinct_word_counts_once():
     entries = [entry("cloud cloud cloud", 9), entry("cloud costs", 1)]
-    assert titles(d.ranked(entries, "cloud costs", 20)) == ["cloud costs", "cloud cloud cloud"]
+    assert titles(feeds.ranked(entries, "cloud costs", 20)) == ["cloud costs", "cloud cloud cloud"]
 
 
 def test_words_are_whole_not_substrings():
     """'cloudy' does not count as 'cloud'."""
     entries = [entry("cloudy weather", 9), entry("cloud news", 1)]
-    assert titles(d.ranked(entries, "cloud", 20)) == ["cloud news", "cloudy weather"]
+    assert titles(feeds.ranked(entries, "cloud", 20)) == ["cloud news", "cloudy weather"]
 
 
 def test_stop_words_and_short_words_are_removed():
-    assert d.words("AI and the Cloud: Tools for ML with Kubernetes") == {
+    assert feeds.words("AI and the Cloud: Tools for ML with Kubernetes") == {
         "cloud",
         "tools",
         "kubernetes",
@@ -76,7 +82,7 @@ def test_stop_words_and_short_words_are_removed():
 
 def test_stop_words_do_not_score():
     entries = [entry("the and for with", 9), entry("security", 1)]
-    assert titles(d.ranked(entries, "Security for the cloud", 20)) == [
+    assert titles(feeds.ranked(entries, "Security for the cloud", 20)) == [
         "security",
         "the and for with",
     ]
@@ -84,11 +90,11 @@ def test_stop_words_do_not_score():
 
 def test_ranked_keeps_at_most_limit():
     entries = [entry(f"e{n}", n) for n in range(1, 10)]
-    assert titles(d.ranked(entries, "", 3)) == ["e9", "e8", "e7"]
+    assert titles(feeds.ranked(entries, "", 3)) == ["e9", "e8", "e7"]
 
 
 def test_default_total_cap_is_20():
-    assert d.rss_max_entries() == 20
+    assert config.rss_max_entries() == 20
 
 
 def test_total_cap_applies_after_per_feed_cap(monkeypatch, web):
@@ -104,12 +110,12 @@ def test_total_cap_applies_after_per_feed_cap(monkeypatch, web):
             ("Kubernetes B5", "https://b.example/5", dated(5)),
         ),
     )
-    search = d.RssSearch(PROFILE)
-    block = search.candidates([], [], "Kubernetes")
+    rss_search = search.RssSearch(PROFILE)
+    block = rss_search.candidates([], [], "Kubernetes")
     # Per feed (3 newest): A14 A13 A12 and B5 B4 B3. Only B5 of those has the
     # topic word; B1 and B2 were already cut by the per-feed cap.
     assert block_titles(block) == ["Kubernetes B5", "A14", "A13", "A12"]
-    assert search.links == {
+    assert rss_search.links == {
         "https://b.example/5",
         "https://a.example/14",
         "https://a.example/13",
@@ -121,12 +127,12 @@ def test_total_cap_applies_after_per_feed_cap(monkeypatch, web):
 def test_bad_total_cap_exits(monkeypatch, value):
     monkeypatch.setenv("AI_POST_RSS_MAX_ENTRIES", value)
     with pytest.raises(SystemExit) as exc:
-        d.rss_max_entries()
+        config.rss_max_entries()
     assert "AI_POST_RSS_MAX_ENTRIES must be a whole number of 1 or more" in exc.value.code
 
 
 def test_bad_total_cap_exits_before_fetching(monkeypatch, web):
     monkeypatch.setenv("AI_POST_RSS_MAX_ENTRIES", "0")
     with pytest.raises(SystemExit):
-        d.RssSearch(PROFILE)
+        search.RssSearch(PROFILE)
     assert web.requests == []

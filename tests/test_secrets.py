@@ -2,12 +2,14 @@
 remedies (R12)."""
 
 import json
+import os
 import urllib.error
+from pathlib import Path
 
 import pytest
 
-import daily_post as d
 from tests.conftest import MODEL_OUTPUT, SENTINEL_KEY, completion
+from xgenerateposts import config, net, providers
 
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
@@ -15,7 +17,7 @@ GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 @pytest.fixture
 def groq(monkeypatch):
     monkeypatch.setenv("GROQ_API_KEY", SENTINEL_KEY)
-    return d.GroqProvider()
+    return providers.GroqProvider()
 
 
 def error_body(message):
@@ -65,8 +67,8 @@ def test_429_suggests_waiting_and_rss(web, groq):
 
 
 def without_nothing_lost(message):
-    assert d.NOTHING_LOST in message
-    return message.replace(d.NOTHING_LOST, "")
+    assert config.NOTHING_LOST in message
+    return message.replace(config.NOTHING_LOST, "")
 
 
 @pytest.mark.parametrize("native", [True, False])
@@ -157,33 +159,34 @@ def test_non_json_response_exits(web, groq):
 
 def test_provider_response_over_2_mb_is_refused(web, groq):
     """R23: feeds get 10 MB, provider responses keep the 2 MB cap."""
-    web.add(GROQ_URL, b" " * (d.MAX_RESPONSE_BYTES + 1))
+    web.add(GROQ_URL, b" " * (config.MAX_RESPONSE_BYTES + 1))
     with pytest.raises(SystemExit) as exc:
         groq.generate("prompt")
     assert "larger than 2,000,000 bytes" in exc.value.code
 
 
 def test_env_file_path_is_read_at_call_time(monkeypatch, tmp_path):
-    """A patched ENV_FILE is read, never the real ~/.ai_post_env."""
+    """The AI_POST_ENV_FILE in force at call time is read, never the real
+    ~/.ai_post_env."""
     var = "XGP_TEST_ENV_FILE_VALUE"
     monkeypatch.setenv(var, "placeholder")
     monkeypatch.delenv(var)  # restored to unset after the test
     env_file = tmp_path / "test.env"
     env_file.write_text(f"export {var}='from the patched file'\n")
-    monkeypatch.setattr(d, "ENV_FILE", env_file)
+    monkeypatch.setenv("AI_POST_ENV_FILE", str(env_file))
     read = []
-    real_read_text = d.Path.read_text
+    real_read_text = Path.read_text
 
     def spy(self, *args, **kwargs):
         read.append(self)
         return real_read_text(self, *args, **kwargs)
 
-    monkeypatch.setattr(d.Path, "read_text", spy)
-    d.load_env_file()
-    assert d.os.environ[var] == "from the patched file"
+    monkeypatch.setattr(Path, "read_text", spy)
+    config.load_env_file()
+    assert os.environ[var] == "from the patched file"
     assert read == [env_file]
-    assert d.Path.home() / ".ai_post_env" not in read
+    assert Path.home() / ".ai_post_env" not in read
 
 
 def test_redact_ignores_empty_and_short_values():
-    assert d.redact("abc", "", "ab") == "abc"
+    assert net.redact("abc", "", "ab") == "abc"
