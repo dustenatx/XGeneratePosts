@@ -160,7 +160,8 @@ one search call fits its tokens-per-minute limit, is not published. If a
 `--provider groq --search rss` instead: Groq then only writes the posts, from
 your feeds.
 
-Environment variables (set them in `~/.ai_post_env` or the shell):
+Environment variables (set them in `~/.ai_post_env` or the shell; a value already set in
+the shell wins, and `AI_POST_ENV_FILE` works only from the shell):
 
 | Variable | Default | Effect |
 |---|---|---|
@@ -176,7 +177,7 @@ Environment variables (set them in `~/.ai_post_env` or the shell):
 | `AI_POST_RSS_PER_FEED` | `3` | Newest entries taken from each feed with `--search rss` |
 | `AI_POST_RSS_MAX_ENTRIES` | `20` | Most candidates sent to the model with `--search rss`, after the per-feed cap. Entries matching more of the topic's words go first, then newer ones. Lower it if Groq returns 413 |
 | `AI_POST_DATA_DIR` | `~/XPosts` | Where the profile, drafts, history and run log live |
-| `AI_POST_ENV_FILE` | `~/.ai_post_env` | The key file loaded at startup |
+| `AI_POST_ENV_FILE` | `~/.ai_post_env` | The key file loaded at startup. Read from the shell environment only: the file can't name its own location, so setting it inside the file has no effect |
 
 ### Optional: publishing to X
 

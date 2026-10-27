@@ -43,9 +43,9 @@ MAX_LINKEDIN_TEXT = 1100  # hard ceiling; the prompt targets 750-950
 
 NOTHING_LOST = "Nothing was saved, so today's topic is still available when you re-run."
 
-# Variables the env file never sets: they are read from the process
-# environment before the file loads, as before the package split.
-PROCESS_ONLY = ("AI_POST_ENV_FILE", "AI_POST_DATA_DIR")
+# The env file can't name its own location, so AI_POST_ENV_FILE comes only
+# from the process environment. Everything else may be set in the file.
+PROCESS_ONLY = ("AI_POST_ENV_FILE",)
 
 
 # ---------------------------------------------------------------------------

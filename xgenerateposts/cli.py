@@ -111,6 +111,10 @@ def generate_item(
 
 def run() -> None:
     """One run: parse the flags, then draft (and optionally publish)."""
+    # Loaded first, so AI_POST_DATA_DIR set in the env file applies to the
+    # --profile default as well as to the history, drafts and run log.
+    config.load_env_file()
+
     parser = argparse.ArgumentParser(
         description="Daily X and LinkedIn draft generator, driven by an "
         "author profile file and a topic you pick at run time."
@@ -152,8 +156,6 @@ def run() -> None:
         "--history", action="store_true", help="show the last 10 items used, then exit"
     )
     args = parser.parse_args()
-
-    config.load_env_file()
 
     if args.history:
         for h in load_history()[-10:]:
