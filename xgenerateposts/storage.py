@@ -5,6 +5,9 @@ import json
 import os
 import sys
 from datetime import date, datetime
+
+# The rule applies only below Python 3.7 and requires-python is >=3.14.
+# nosemgrep: python.lang.compatibility.python37.python37-compatibility-importlib2
 from importlib import resources
 from pathlib import Path
 

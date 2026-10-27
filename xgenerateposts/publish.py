@@ -87,6 +87,8 @@ def post_to_linkedin(post: str) -> str:
         method="POST",
     )
     try:
+        # The Request URL is the literal https://api.linkedin.com/rest/posts.
+        # nosemgrep: dynamic-urllib-use-detected.dynamic-urllib-use-detected
         with urllib.request.urlopen(request) as response:  # noqa: S310 - hardcoded https://api.linkedin.com URL
             return response.headers.get("x-restli-id", "posted")
     except urllib.error.HTTPError as exc:
