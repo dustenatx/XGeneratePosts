@@ -702,7 +702,7 @@ class OpenAICompatProvider:
         return {"model": self.model, "messages": [{"role": "user", "content": prompt}]}
 
     def generate(self, prompt: str, native_search: bool = False) -> str:
-        payload = chat_completion(self, self.request_body(prompt, native_search))
+        payload = chat_completion(self, self.request_body(prompt, native_search), native_search)
         try:
             text = payload["choices"][0]["message"]["content"]
         except KeyError, IndexError, TypeError:
@@ -746,7 +746,7 @@ class GroqProvider(OpenAICompatProvider):
         return body
 
 
-def chat_completion(provider: OpenAICompatProvider, body: dict) -> dict:
+def chat_completion(provider: OpenAICompatProvider, body: dict, native_search: bool) -> dict:
     """POST to {base_url}/chat/completions and return the parsed JSON.
 
     Every expected failure exits with a remedy; the API key is never shown.
@@ -766,7 +766,8 @@ def chat_completion(provider: OpenAICompatProvider, body: dict) -> dict:
         with HTTP_OPENER.open(request, timeout=timeout) as response:
             raw = read_capped(response)
     except urllib.error.HTTPError as exc:
-        raise SystemExit(f"\n{redact(friendly_http_error(provider, exc), key)}\n") from None
+        message = friendly_http_error(provider, exc, native_search)
+        raise SystemExit(f"\n{redact(message, key)}\n") from None
     except TimeoutError:
         raise SystemExit(timeout_message(provider, timeout)) from None
     except urllib.error.URLError as exc:
@@ -800,7 +801,9 @@ def timeout_message(provider: OpenAICompatProvider, timeout: float) -> str:
     )
 
 
-def friendly_http_error(provider: OpenAICompatProvider, exc: urllib.error.HTTPError) -> str:
+def friendly_http_error(
+    provider: OpenAICompatProvider, exc: urllib.error.HTTPError, native_search: bool
+) -> str:
     """Turn an HTTP error from an OpenAI-compatible API into a remedy.
 
     Error bodies look like {"error": {"message": ..., "type": ...}}.
@@ -835,13 +838,34 @@ def friendly_http_error(provider: OpenAICompatProvider, exc: urllib.error.HTTPEr
             f"{name} could not find the model or endpoint ({code}): {detail}\n\n"
             f"  Check the model name ({provider.model}) and base URL ({provider.base_url})."
         )
-    if code == 413 or code == 429:
+    if code == 413:  # R24: waiting won't shrink the request
+        if native_search:
+            remedy = (
+                "  Use --search rss with a smaller AI_POST_RSS_MAX_ENTRIES (for example\n"
+                "  10), so the model only writes from a short list of feed entries."
+            )
+        else:
+            remedy = (
+                "  Send fewer feed entries: lower AI_POST_RSS_MAX_ENTRIES\n"
+                f"  (default {DEFAULT_RSS_MAX_ENTRIES}) or AI_POST_RSS_PER_FEED"
+                f" (default {DEFAULT_RSS_PER_FEED})."
+            )
+        return (
+            f"{name} says the request is too large for the plan's per-minute\n"
+            f"  token limit ({code}): {detail}\n\n{remedy}\n\n  {NOTHING_LOST}"
+        )
+    if code == 429:
         retry = exc.headers.get("retry-after") if exc.headers else None
         wait = f" {name} suggests waiting {retry} seconds." if retry else ""
+        hint = ""
+        if native_search:  # in rss mode there is no smaller search to switch to
+            hint = (
+                " If one call is over the\n"
+                "  tokens-per-minute limit, --search rss sends a smaller request."
+            )
         return (
-            f"{name} rate or size limit hit ({code}): {detail}\n\n"
-            f"  Wait a minute and re-run.{wait} If one call is over the\n"
-            "  tokens-per-minute limit, --search rss sends a smaller request.\n\n"
+            f"{name} rate limit hit ({code}): {detail}\n\n"
+            f"  Wait a minute and re-run.{wait}{hint}\n\n"
             f"  {NOTHING_LOST}"
         )
     if code == 498 or code >= 500:
