@@ -26,3 +26,14 @@ jobs:
         run: uvx ruff@0.16.10 check .
       - name: Format check (ruff)
         run: uvx ruff@0.16.10 format --check .
+      - name: Frozen acceptance tests unchanged
+        if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'acceptance/')
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          if ! git diff --quiet FETCH_HEAD -- tests/acceptance; then
+            echo "::error::tests/acceptance/ differs from $BASE_REF. Frozen acceptance tests change only in an acceptance/* PR approved by Dusten."
+            git diff --stat FETCH_HEAD -- tests/acceptance
+            exit 1
+          fi
