@@ -1028,8 +1028,9 @@ def fetch_feed(url: str) -> bytes:
             "Accept": "application/rss+xml, application/atom+xml, application/xml;q=0.9, */*;q=0.1",
         },
     )
-    # No Accept-Encoding is sent and urllib does not decompress, so a
-    # compressed "decompression bomb" is never expanded.
+    # Only identity encoding is requested (urllib's default Accept-Encoding:
+    # identity) and urllib never decompresses, so a compressed "decompression
+    # bomb" is never expanded.
     with HTTP_OPENER.open(request, timeout=FEED_TIMEOUT) as response:
         return read_capped(response)
 
