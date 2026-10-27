@@ -94,5 +94,13 @@ def test_non_json_response_exits(web, groq):
     assert "not JSON" in exc.value.code
 
 
+def test_provider_response_over_2_mb_is_refused(web, groq):
+    """R23: feeds get 10 MB, provider responses keep the 2 MB cap."""
+    web.add(GROQ_URL, b" " * (d.MAX_RESPONSE_BYTES + 1))
+    with pytest.raises(SystemExit) as exc:
+        groq.generate("prompt")
+    assert "larger than 2,000,000 bytes" in exc.value.code
+
+
 def test_redact_ignores_empty_and_short_values():
     assert d.redact("abc", "", "ab") == "abc"

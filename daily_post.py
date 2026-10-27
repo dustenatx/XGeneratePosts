@@ -79,7 +79,8 @@ GROQ_KEYS = "https://console.groq.com/keys"
 DEFAULT_PROVIDER_TIMEOUT = 120.0  # seconds, override with AI_POST_PROVIDER_TIMEOUT
 
 HTTP_USER_AGENT = "XGeneratePosts/3 (+https://github.com/dustenatx/XGeneratePosts)"
-MAX_RESPONSE_BYTES = 2_000_000  # cap on any one HTTP response we read
+MAX_RESPONSE_BYTES = 2_000_000  # cap on any one provider response we read
+MAX_FEED_BYTES = 10_000_000  # feeds get their own cap; some run past 2 MB (R23)
 
 # Where the item comes from: the provider's own server-side search, or RSS
 # feeds listed in the profile's '## Feeds' section.
@@ -1032,7 +1033,7 @@ def fetch_feed(url: str) -> bytes:
     # identity) and urllib never decompresses, so a compressed "decompression
     # bomb" is never expanded.
     with HTTP_OPENER.open(request, timeout=FEED_TIMEOUT) as response:
-        return read_capped(response)
+        return read_capped(response, MAX_FEED_BYTES)
 
 
 def newest(entries: list, limit: int) -> list:

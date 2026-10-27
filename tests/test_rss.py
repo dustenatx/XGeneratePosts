@@ -145,12 +145,26 @@ def test_no_entries_from_any_feed_exits(web):
     assert "No feed yielded a new entry" in exc.value.code
 
 
+def test_feed_cap_is_10_mb_and_provider_cap_stays_2_mb():
+    """R23"""
+    assert d.MAX_FEED_BYTES == 10_000_000
+    assert d.MAX_RESPONSE_BYTES == 2_000_000
+
+
 def test_oversized_feed_is_skipped(web, isolated):
-    web.add(FEED_A, b"<rss>" + b" " * d.MAX_RESPONSE_BYTES + b"</rss>")
+    web.add(FEED_A, b"<rss>" + b" " * d.MAX_FEED_BYTES + b"</rss>")
     web.add(FEED_B, b"<rss><channel/></rss>")
     with pytest.raises(SystemExit):
         d.RssSearch(PROFILE).candidates([], [])
-    assert "larger than 2,000,000 bytes" in (isolated / "run.log").read_text()
+    assert "larger than 10,000,000 bytes" in (isolated / "run.log").read_text()
+
+
+def test_feed_over_provider_cap_is_still_read(web):
+    """R23: a 3 MB feed is under the feed cap, though over the provider cap."""
+    padding = b"<!--" + b" " * (3 * 1_000_000) + b"-->"
+    web.add(FEED_A, FIVE.replace(b"<channel>", b"<channel>" + padding))
+    web.add(FEED_B, rss())
+    assert "A14" in d.RssSearch(PROFILE).candidates([], [])
 
 
 def test_missing_feeds_section_exits_with_how_to():
