@@ -174,6 +174,7 @@ Environment variables (set them in `~/.ai_post_env` or the shell):
 | `OPENAI_COMPAT_API_KEY` | none | Key for that service; not needed for local Ollama |
 | `AI_POST_PROVIDER_TIMEOUT` | `120` | Seconds to wait for a response. Applies to `groq` and `openai-compat` only; `anthropic` keeps its SDK's own timeout. Feed requests always time out after 15 seconds |
 | `AI_POST_RSS_PER_FEED` | `3` | Newest entries taken from each feed with `--search rss` |
+| `AI_POST_RSS_MAX_ENTRIES` | `20` | Most candidates sent to the model with `--search rss`, after the per-feed cap. Entries matching more of the topic's words go first, then newer ones. Lower it if Groq returns 413 |
 | `AI_POST_DATA_DIR` | `~/XPosts` | Where the profile, drafts, history and run log live |
 | `AI_POST_ENV_FILE` | `~/.ai_post_env` | The key file loaded at startup |
 

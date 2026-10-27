@@ -59,9 +59,70 @@ def test_connection_error_is_redacted(web, groq):
 def test_429_suggests_waiting_and_rss(web, groq):
     web.add(GROQ_URL, error_body("Rate limit reached"), status=429, headers={"retry-after": "7"})
     with pytest.raises(SystemExit) as exc:
-        groq.generate("prompt")
+        groq.generate("prompt", native_search=True)
     assert "waiting 7 seconds" in exc.value.code
     assert "--search rss" in exc.value.code
+
+
+def without_nothing_lost(message):
+    assert d.NOTHING_LOST in message
+    return message.replace(d.NOTHING_LOST, "")
+
+
+@pytest.mark.parametrize("native", [True, False])
+def test_429_says_wait_with_retry_after(web, groq, native):
+    """R24"""
+    web.add(
+        GROQ_URL,
+        error_body(f"Rate limit reached for {SENTINEL_KEY}"),
+        status=429,
+        headers={"retry-after": "12"},
+    )
+    with pytest.raises(SystemExit) as exc:
+        groq.generate("prompt", native_search=native)
+    message = exc.value.code
+    assert "Wait a minute" in message
+    assert "waiting 12 seconds" in message
+    assert SENTINEL_KEY not in message
+    without_nothing_lost(message)
+    assert ("--search rss" in message) is native  # nothing to switch to in rss mode
+
+
+def test_429_without_retry_after_still_says_wait(web, groq):
+    web.add(GROQ_URL, error_body("Rate limit reached"), status=429)
+    with pytest.raises(SystemExit) as exc:
+        groq.generate("prompt")
+    assert "Wait a minute" in exc.value.code
+    assert "suggests waiting" not in exc.value.code
+
+
+@pytest.mark.parametrize(
+    ("native", "remedies"),
+    [
+        (False, ["AI_POST_RSS_MAX_ENTRIES", "AI_POST_RSS_PER_FEED"]),
+        (True, ["--search rss", "AI_POST_RSS_MAX_ENTRIES"]),
+    ],
+)
+def test_413_says_too_large_and_never_wait(web, groq, native, remedies):
+    """R24: waiting can't help a request that is over the limit on its own."""
+    web.add(
+        GROQ_URL,
+        error_body(f"Request too large for {SENTINEL_KEY}"),
+        status=413,
+        headers={"retry-after": "5"},
+    )
+    with pytest.raises(SystemExit) as exc:
+        groq.generate("prompt", native_search=native)
+    message = exc.value.code
+    assert "too large for the plan's per-minute" in message
+    for remedy in remedies:
+        assert remedy in message
+    assert SENTINEL_KEY not in message
+    rest = without_nothing_lost(message).lower()
+    assert "wait" not in rest
+    assert "re-run" not in rest
+    if not native:
+        assert "--search rss" not in rest
 
 
 @pytest.mark.parametrize(
@@ -69,7 +130,7 @@ def test_429_suggests_waiting_and_rss(web, groq):
     [
         (403, "--search rss"),
         (404, "openai/gpt-oss-120b"),
-        (413, "tokens-per-minute"),
+        (413, "per-minute"),
         (503, "server error"),
     ],
 )
@@ -92,6 +153,36 @@ def test_non_json_response_exits(web, groq):
     with pytest.raises(SystemExit) as exc:
         groq.generate("prompt")
     assert "not JSON" in exc.value.code
+
+
+def test_provider_response_over_2_mb_is_refused(web, groq):
+    """R23: feeds get 10 MB, provider responses keep the 2 MB cap."""
+    web.add(GROQ_URL, b" " * (d.MAX_RESPONSE_BYTES + 1))
+    with pytest.raises(SystemExit) as exc:
+        groq.generate("prompt")
+    assert "larger than 2,000,000 bytes" in exc.value.code
+
+
+def test_env_file_path_is_read_at_call_time(monkeypatch, tmp_path):
+    """A patched ENV_FILE is read, never the real ~/.ai_post_env."""
+    var = "XGP_TEST_ENV_FILE_VALUE"
+    monkeypatch.setenv(var, "placeholder")
+    monkeypatch.delenv(var)  # restored to unset after the test
+    env_file = tmp_path / "test.env"
+    env_file.write_text(f"export {var}='from the patched file'\n")
+    monkeypatch.setattr(d, "ENV_FILE", env_file)
+    read = []
+    real_read_text = d.Path.read_text
+
+    def spy(self, *args, **kwargs):
+        read.append(self)
+        return real_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(d.Path, "read_text", spy)
+    d.load_env_file()
+    assert d.os.environ[var] == "from the patched file"
+    assert read == [env_file]
+    assert d.Path.home() / ".ai_post_env" not in read
 
 
 def test_redact_ignores_empty_and_short_values():

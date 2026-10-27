@@ -78,7 +78,7 @@ def test_cap_holds_per_feed_newest_first(web):
     web.add(FEED_A, FIVE)
     web.add(FEED_B, rss(*[(f"B{n}", f"https://b.example/{n}", dated(n)) for n in range(1, 6)]))
     search = d.RssSearch(PROFILE)
-    block = search.candidates([], [])
+    block = search.candidates([], [], "")
     titles = [line.split("Title: ")[1] for line in block.splitlines() if "Title: " in line]
     assert titles == ["A14", "A13", "A12", "B5", "B4", "B3"]
 
@@ -87,7 +87,7 @@ def test_cap_is_configurable(monkeypatch, web):
     monkeypatch.setenv("AI_POST_RSS_PER_FEED", "1")
     web.add(FEED_A, FIVE)
     web.add(FEED_B, FIVE)
-    assert d.RssSearch(PROFILE).candidates([], []).count("Title: ") == 2
+    assert d.RssSearch(PROFILE).candidates([], [], "").count("Title: ") == 2
 
 
 @pytest.mark.parametrize("value", ["0", "-2", "three"])
@@ -101,7 +101,7 @@ def test_bad_cap_exits(monkeypatch, value):
 def test_used_entries_are_filtered_before_the_cap(web):
     web.add(FEED_A, FIVE)
     web.add(FEED_B, rss())
-    block = d.RssSearch(PROFILE).candidates(["https://a.example/14"], ["a13"])
+    block = d.RssSearch(PROFILE).candidates(["https://a.example/14"], ["a13"], "")
     assert "A14" not in block
     assert "A13" not in block
     assert "A12" in block and "A11" in block and "A10" in block
@@ -111,7 +111,7 @@ def test_https_to_http_redirect_is_refused_and_logged(web, isolated):
     """R18: the redirect goes through the real opener and is refused."""
     web.redirect(FEED_A, "http://feeds.example/a.xml")
     web.add(FEED_B, FIVE)
-    block = d.RssSearch(PROFILE).candidates([], [])
+    block = d.RssSearch(PROFILE).candidates([], [], "")
     assert "A14" in block  # R10: the other feed still counts
     assert [r.full_url for r in web.requests] == [FEED_A, FEED_B]
     log = (isolated / "run.log").read_text()
@@ -122,16 +122,16 @@ def test_https_to_https_redirect_is_followed(web):
     web.redirect(FEED_A, "https://cdn.example/a.xml")
     web.add("https://cdn.example/a.xml", FIVE)
     web.add(FEED_B, rss())
-    assert "A14" in d.RssSearch(PROFILE).candidates([], [])
+    assert "A14" in d.RssSearch(PROFILE).candidates([], [], "")
 
 
 def test_failing_feeds_are_skipped(web, isolated):
     """R10: an HTTP error and a parse error are logged; the run continues."""
     web.add(FEED_A, b"<rss><channel><item>", status=200)
     web.add(FEED_B, FIVE)
-    assert "A14" in d.RssSearch(PROFILE).candidates([], [])
+    assert "A14" in d.RssSearch(PROFILE).candidates([], [], "")
     web.add(FEED_A, b"gone", status=404)
-    assert "A14" in d.RssSearch(PROFILE).candidates([], [])
+    assert "A14" in d.RssSearch(PROFILE).candidates([], [], "")
     log = (isolated / "run.log").read_text()
     assert "ParseError" in log
     assert "HTTPError" in log
@@ -141,16 +141,30 @@ def test_no_entries_from_any_feed_exits(web):
     web.add(FEED_A, b"x", status=500)
     web.add(FEED_B, rss())
     with pytest.raises(SystemExit) as exc:
-        d.RssSearch(PROFILE).candidates([], [])
+        d.RssSearch(PROFILE).candidates([], [], "")
     assert "No feed yielded a new entry" in exc.value.code
 
 
+def test_feed_cap_is_10_mb_and_provider_cap_stays_2_mb():
+    """R23"""
+    assert d.MAX_FEED_BYTES == 10_000_000
+    assert d.MAX_RESPONSE_BYTES == 2_000_000
+
+
 def test_oversized_feed_is_skipped(web, isolated):
-    web.add(FEED_A, b"<rss>" + b" " * d.MAX_RESPONSE_BYTES + b"</rss>")
+    web.add(FEED_A, b"<rss>" + b" " * d.MAX_FEED_BYTES + b"</rss>")
     web.add(FEED_B, b"<rss><channel/></rss>")
     with pytest.raises(SystemExit):
-        d.RssSearch(PROFILE).candidates([], [])
-    assert "larger than 2,000,000 bytes" in (isolated / "run.log").read_text()
+        d.RssSearch(PROFILE).candidates([], [], "")
+    assert "larger than 10,000,000 bytes" in (isolated / "run.log").read_text()
+
+
+def test_feed_over_provider_cap_is_still_read(web):
+    """R23: a 3 MB feed is under the feed cap, though over the provider cap."""
+    padding = b"<!--" + b" " * (3 * 1_000_000) + b"-->"
+    web.add(FEED_A, FIVE.replace(b"<channel>", b"<channel>" + padding))
+    web.add(FEED_B, rss())
+    assert "A14" in d.RssSearch(PROFILE).candidates([], [], "")
 
 
 def test_missing_feeds_section_exits_with_how_to():

@@ -79,7 +79,8 @@ GROQ_KEYS = "https://console.groq.com/keys"
 DEFAULT_PROVIDER_TIMEOUT = 120.0  # seconds, override with AI_POST_PROVIDER_TIMEOUT
 
 HTTP_USER_AGENT = "XGeneratePosts/3 (+https://github.com/dustenatx/XGeneratePosts)"
-MAX_RESPONSE_BYTES = 2_000_000  # cap on any one HTTP response we read
+MAX_RESPONSE_BYTES = 2_000_000  # cap on any one provider response we read
+MAX_FEED_BYTES = 10_000_000  # feeds get their own cap; some run past 2 MB (R23)
 
 # Where the item comes from: the provider's own server-side search, or RSS
 # feeds listed in the profile's '## Feeds' section.
@@ -87,6 +88,12 @@ SEARCH_SOURCES = ("native", "rss")
 NATIVE_SEARCH_PROVIDERS = ("anthropic", "groq")  # default to native; others to rss
 FEED_TIMEOUT = 15.0  # seconds per feed request (R20)
 DEFAULT_RSS_PER_FEED = 3  # newest entries per feed, override with AI_POST_RSS_PER_FEED
+# Total candidates sent, best topic match first, override with
+# AI_POST_RSS_MAX_ENTRIES. Keeps one call under Groq's free 8,000 TPM (R22).
+DEFAULT_RSS_MAX_ENTRIES = 20
+STOP_WORDS = frozenset(
+    {"and", "the", "for", "with", "from", "into", "about", "that", "this", "are", "its", "how"}
+)
 RSS_SUMMARY_CHARS = 300
 # Expat below 2.7.2 may be open to billion-laughs, quadratic-blowup and
 # large-token attacks (https://docs.python.org/3/library/xml.html#xml-security).
@@ -251,9 +258,11 @@ one sentence: why you picked it
 # ---------------------------------------------------------------------------
 
 
-def load_env_file(path: Path = ENV_FILE) -> None:
+def load_env_file(path: Path | None = None) -> None:
     """Load KEY=value lines (with or without a leading 'export ') into
-    os.environ. Variables already set in the environment win."""
+    os.environ. Variables already set in the environment win. ENV_FILE is
+    read at call time, so tests can point it at a throwaway file."""
+    path = ENV_FILE if path is None else path
     if not path.exists():
         return
     for line in path.read_text().splitlines():
@@ -695,7 +704,7 @@ class OpenAICompatProvider:
         return {"model": self.model, "messages": [{"role": "user", "content": prompt}]}
 
     def generate(self, prompt: str, native_search: bool = False) -> str:
-        payload = chat_completion(self, self.request_body(prompt, native_search))
+        payload = chat_completion(self, self.request_body(prompt, native_search), native_search)
         try:
             text = payload["choices"][0]["message"]["content"]
         except KeyError, IndexError, TypeError:
@@ -739,7 +748,7 @@ class GroqProvider(OpenAICompatProvider):
         return body
 
 
-def chat_completion(provider: OpenAICompatProvider, body: dict) -> dict:
+def chat_completion(provider: OpenAICompatProvider, body: dict, native_search: bool) -> dict:
     """POST to {base_url}/chat/completions and return the parsed JSON.
 
     Every expected failure exits with a remedy; the API key is never shown.
@@ -759,7 +768,8 @@ def chat_completion(provider: OpenAICompatProvider, body: dict) -> dict:
         with HTTP_OPENER.open(request, timeout=timeout) as response:
             raw = read_capped(response)
     except urllib.error.HTTPError as exc:
-        raise SystemExit(f"\n{redact(friendly_http_error(provider, exc), key)}\n") from None
+        message = friendly_http_error(provider, exc, native_search)
+        raise SystemExit(f"\n{redact(message, key)}\n") from None
     except TimeoutError:
         raise SystemExit(timeout_message(provider, timeout)) from None
     except urllib.error.URLError as exc:
@@ -793,7 +803,9 @@ def timeout_message(provider: OpenAICompatProvider, timeout: float) -> str:
     )
 
 
-def friendly_http_error(provider: OpenAICompatProvider, exc: urllib.error.HTTPError) -> str:
+def friendly_http_error(
+    provider: OpenAICompatProvider, exc: urllib.error.HTTPError, native_search: bool
+) -> str:
     """Turn an HTTP error from an OpenAI-compatible API into a remedy.
 
     Error bodies look like {"error": {"message": ..., "type": ...}}.
@@ -828,13 +840,34 @@ def friendly_http_error(provider: OpenAICompatProvider, exc: urllib.error.HTTPEr
             f"{name} could not find the model or endpoint ({code}): {detail}\n\n"
             f"  Check the model name ({provider.model}) and base URL ({provider.base_url})."
         )
-    if code == 413 or code == 429:
+    if code == 413:  # R24: waiting won't shrink the request
+        if native_search:
+            remedy = (
+                "  Use --search rss with a smaller AI_POST_RSS_MAX_ENTRIES (for example\n"
+                "  10), so the model only writes from a short list of feed entries."
+            )
+        else:
+            remedy = (
+                "  Send fewer feed entries: lower AI_POST_RSS_MAX_ENTRIES\n"
+                f"  (default {DEFAULT_RSS_MAX_ENTRIES}) or AI_POST_RSS_PER_FEED"
+                f" (default {DEFAULT_RSS_PER_FEED})."
+            )
+        return (
+            f"{name} says the request is too large for the plan's per-minute\n"
+            f"  token limit ({code}): {detail}\n\n{remedy}\n\n  {NOTHING_LOST}"
+        )
+    if code == 429:
         retry = exc.headers.get("retry-after") if exc.headers else None
         wait = f" {name} suggests waiting {retry} seconds." if retry else ""
+        hint = ""
+        if native_search:  # in rss mode there is no smaller search to switch to
+            hint = (
+                " If one call is over the\n"
+                "  tokens-per-minute limit, --search rss sends a smaller request."
+            )
         return (
-            f"{name} rate or size limit hit ({code}): {detail}\n\n"
-            f"  Wait a minute and re-run.{wait} If one call is over the\n"
-            "  tokens-per-minute limit, --search rss sends a smaller request.\n\n"
+            f"{name} rate limit hit ({code}): {detail}\n\n"
+            f"  Wait a minute and re-run.{wait}{hint}\n\n"
             f"  {NOTHING_LOST}"
         )
     if code == 498 or code >= 500:
@@ -893,7 +926,7 @@ class NativeSearch:
 
     name = "native"
 
-    def candidates(self, used_urls: list, used_titles: list) -> str | None:
+    def candidates(self, used_urls: list, used_titles: list, topic: str) -> str | None:
         return None
 
 
@@ -910,15 +943,21 @@ def require_expat() -> None:
         )
 
 
-def rss_per_feed() -> int:
-    raw = os.environ.get("AI_POST_RSS_PER_FEED", "").strip()
+def env_whole_number(var: str, default: int) -> int:
+    raw = os.environ.get(var, "").strip()
     if not raw:
-        return DEFAULT_RSS_PER_FEED
+        return default
     if not raw.isdigit() or int(raw) < 1:
-        raise SystemExit(
-            f"\nAI_POST_RSS_PER_FEED must be a whole number of 1 or more; got {raw!r}.\n"
-        )
+        raise SystemExit(f"\n{var} must be a whole number of 1 or more; got {raw!r}.\n")
     return int(raw)
+
+
+def rss_per_feed() -> int:
+    return env_whole_number("AI_POST_RSS_PER_FEED", DEFAULT_RSS_PER_FEED)
+
+
+def rss_max_entries() -> int:
+    return env_whole_number("AI_POST_RSS_MAX_ENTRIES", DEFAULT_RSS_MAX_ENTRIES)
 
 
 def warn(message: str) -> None:
@@ -1032,13 +1071,31 @@ def fetch_feed(url: str) -> bytes:
     # identity) and urllib never decompresses, so a compressed "decompression
     # bomb" is never expanded.
     with HTTP_OPENER.open(request, timeout=FEED_TIMEOUT) as response:
-        return read_capped(response)
+        return read_capped(response, MAX_FEED_BYTES)
 
 
 def newest(entries: list, limit: int) -> list:
     """Newest first; undated entries keep feed order after dated ones (R19)."""
     floor = datetime.min.replace(tzinfo=UTC)
     return sorted(entries, key=lambda e: e["date"] or floor, reverse=True)[:limit]
+
+
+def words(text: str) -> set:
+    """Lower-cased words of 3+ characters, stop words removed (R22)."""
+    return {w for w in re.findall(r"[a-z0-9]+", text.lower()) if len(w) >= 3} - STOP_WORDS
+
+
+def ranked(entries: list, topic: str, limit: int) -> list:
+    """Most topic words in title or summary first, then newest first; undated
+    entries go last within a score, in feed order (R22)."""
+    wanted = words(topic)
+    floor = datetime.min.replace(tzinfo=UTC)
+
+    def key(e: dict) -> tuple:
+        found = words(f"{clean_text(e['title'])} {clean_text(e['summary'])}")
+        return len(wanted & found), e["date"] or floor
+
+    return sorted(entries, key=key, reverse=True)[:limit]
 
 
 class RssSearch:
@@ -1050,9 +1107,10 @@ class RssSearch:
         require_expat()
         self.feeds = parse_feeds(profile)
         self.per_feed = rss_per_feed()
+        self.max_entries = rss_max_entries()
         self.links = set()
 
-    def candidates(self, used_urls: list, used_titles: list) -> str:
+    def candidates(self, used_urls: list, used_titles: list, topic: str) -> str:
         picked = []
         for url in self.feeds:
             try:
@@ -1076,6 +1134,7 @@ class RssSearch:
                 f"\nNo feed yielded a new entry ({len(self.feeds)} tried). "
                 f"The reasons are in {LOG_FILE}.\n\n  {NOTHING_LOST}\n"
             )
+        picked = ranked(picked, topic, self.max_entries)
         self.links = {e["link"] for e in picked}
         return format_candidates(picked)
 
@@ -1139,7 +1198,7 @@ def trim(text: str, limit: int) -> str:
 def generate_item(
     provider, search, profile: dict, topic: str, used_urls: list, used_titles: list
 ) -> dict:
-    candidates = search.candidates(used_urls, used_titles)
+    candidates = search.candidates(used_urls, used_titles, topic)
     prompt = build_prompt(profile, topic, used_urls, used_titles, candidates)
     text = provider.generate(prompt, native_search=candidates is None)
 
