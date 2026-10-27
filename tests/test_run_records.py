@@ -2,11 +2,12 @@
 search source produced each run, and no key anywhere in the output."""
 
 import json
+import sys
 
 import pytest
 
-import daily_post as d
 from tests.conftest import MODEL_OUTPUT, SENTINEL_KEY, completion
+from xgenerateposts import cli
 
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 FEED = rb"""<?xml version="1.0"?><rss version="2.0"><channel>
@@ -16,8 +17,8 @@ FEED = rb"""<?xml version="1.0"?><rss version="2.0"><channel>
 
 
 def run_main(monkeypatch, *args):
-    monkeypatch.setattr(d.sys, "argv", ["daily_post.py", *args])
-    d.main()
+    monkeypatch.setattr(sys, "argv", ["daily_post.py", *args])
+    cli.run()
 
 
 @pytest.fixture

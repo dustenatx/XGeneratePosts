@@ -44,3 +44,5 @@ jobs:
         run: uv run --no-project --python 3.14 python -c "import pyexpat; print(pyexpat.EXPAT_VERSION)"
       - name: Lint, types and tests (make check)
         run: make check
+      - name: Install check (R42)
+        run: make install-check

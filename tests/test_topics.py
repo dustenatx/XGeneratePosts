@@ -1,47 +1,49 @@
+import sys
+
 import pytest
 
-import daily_post as d
+from xgenerateposts import author_profile, cli
 
 TOPICS = ["Cloud infrastructure", "Cloud cost", "Security"]
 
 
 def test_menu_strips_bullets_and_numbers():
     profile = {"topics": "- One\n* Two\n3. Three\n4) Four\n# comment\n\n"}
-    assert d.topic_menu(profile) == ["One", "Two", "Three", "Four"]
+    assert author_profile.topic_menu(profile) == ["One", "Two", "Three", "Four"]
 
 
 def test_menu_falls_back_to_catalog():
-    assert d.topic_menu({}) == d.TOPIC_CATALOG
+    assert author_profile.topic_menu({}) == author_profile.TOPIC_CATALOG
 
 
 def test_number_selects_entry():
-    assert d.choose_topic(TOPICS, "3") == "Security"
+    assert cli.choose_topic(TOPICS, "3") == "Security"
 
 
 def test_unique_substring_selects_entry():
-    assert d.choose_topic(TOPICS, "secur") == "Security"
+    assert cli.choose_topic(TOPICS, "secur") == "Security"
 
 
 def test_ambiguous_substring_exits():
     with pytest.raises(SystemExit) as exc:
-        d.choose_topic(TOPICS, "cloud")
+        cli.choose_topic(TOPICS, "cloud")
     assert "Ambiguous" in exc.value.code
 
 
 def test_free_text_passes_through():
-    assert d.choose_topic(TOPICS, "Quantum networking") == "Quantum networking"
+    assert cli.choose_topic(TOPICS, "Quantum networking") == "Quantum networking"
 
 
 def test_out_of_range_number_is_free_text():
-    assert d.choose_topic(TOPICS, "9") == "9"
+    assert cli.choose_topic(TOPICS, "9") == "9"
 
 
 def test_random_picks_from_menu():
-    assert d.choose_topic(TOPICS, pick_random=True) in TOPICS
+    assert cli.choose_topic(TOPICS, pick_random=True) in TOPICS
 
 
 def test_no_terminal_and_no_topic_exits(monkeypatch):
-    monkeypatch.setattr(d.sys.stdin, "isatty", lambda: False)
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
     with pytest.raises(SystemExit) as exc:
-        d.choose_topic(TOPICS)
+        cli.choose_topic(TOPICS)
     assert "--random-topic" in exc.value.code

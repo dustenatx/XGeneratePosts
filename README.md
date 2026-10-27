@@ -42,6 +42,15 @@ Each run:
 
 ## Setup
 
+There are two ways to run it:
+
+- **Installed, as the `xgp` command.** Installing from a tagged release, with
+  `uv tool install` or `pipx`, is documented when releases start (v3.1 PR 4).
+  Once installed, `xgp init` creates your data directory and a profile to fill
+  in, and `xgp` takes the same flags as `daily_post.py` below.
+- **From a clone of this repo**, with `python daily_post.py`. The steps below
+  cover this path; every command works the same as `xgp`.
+
 **1. Virtual environment.** Required on Homebrew and modern-distro Pythons,
 which block system-wide pip installs per PEP 668. Nothing needs installing for
 the default provider:
@@ -66,13 +75,17 @@ The script loads this at startup. An already-set environment variable wins,
 which is handy for one-off overrides. The `export` prefix is optional but lets
 the same file double as a shell-sourceable env file.
 
-**3. Author profile — the important step.** Copy the scaffold to your data
-directory and fill it in:
+**3. Author profile — the important step.** Create it from the scaffold, then
+fill it in:
 
 ```bash
-mkdir -p ~/XPosts
-cp author_profile.example.md ~/XPosts/author_profile.md
+~/.ai_post_venv/bin/python daily_post.py init    # installed: xgp init
 ```
+
+This creates the data directory (`~/XPosts`, or `AI_POST_DATA_DIR`) with mode
+700 if it doesn't exist, and copies `xgenerateposts/author_profile.example.md`
+there as `author_profile.md`, with mode 600. It never overwrites an existing
+profile: if one is there, it says so and exits without changing anything.
 
 The scaffold explains each section:
 
@@ -160,7 +173,8 @@ one search call fits its tokens-per-minute limit, is not published. If a
 `--provider groq --search rss` instead: Groq then only writes the posts, from
 your feeds.
 
-Environment variables (set them in `~/.ai_post_env` or the shell):
+Environment variables (set them in `~/.ai_post_env` or the shell; a value already set in
+the shell wins, and `AI_POST_ENV_FILE` works only from the shell):
 
 | Variable | Default | Effect |
 |---|---|---|
@@ -176,7 +190,7 @@ Environment variables (set them in `~/.ai_post_env` or the shell):
 | `AI_POST_RSS_PER_FEED` | `3` | Newest entries taken from each feed with `--search rss` |
 | `AI_POST_RSS_MAX_ENTRIES` | `20` | Most candidates sent to the model with `--search rss`, after the per-feed cap. Entries matching more of the topic's words go first, then newer ones. Lower it if Groq returns 413 |
 | `AI_POST_DATA_DIR` | `~/XPosts` | Where the profile, drafts, history and run log live |
-| `AI_POST_ENV_FILE` | `~/.ai_post_env` | The key file loaded at startup |
+| `AI_POST_ENV_FILE` | `~/.ai_post_env` | The key file loaded at startup. Read from the shell environment only: the file can't name its own location, so setting it inside the file has no effect |
 
 ### Optional: publishing to X
 
@@ -232,8 +246,10 @@ In the repo:
 
 | File | Purpose |
 |---|---|
-| `daily_post.py` | The generator |
-| `author_profile.example.md` | Scaffold to copy and fill in |
+| `daily_post.py` | Runs the generator from a clone; a few lines that call the package |
+| `xgenerateposts/` | The generator, as a package. Installed, it provides the `xgp` command |
+| `xgenerateposts/author_profile.example.md` | Scaffold that `xgp init` copies; fill it in |
+| `scripts/install-check.sh` | Builds and installs the package in a clean environment and checks `xgp init` (`make install-check`) |
 | `tests/` | Unit and acceptance tests, run with `make check`; no network needed |
 | `docs/decisions.md` | Owner decisions and recorded departures |
 
@@ -258,6 +274,7 @@ uv sync      # Python from .python-version, plus the dev tools from uv.lock
 make check   # ruff check, ruff format --check, mypy, pytest with coverage
 make audit   # pip-audit against the locked dependencies
 make sbom    # CycloneDX SBOM of the runtime dependencies, to build/sbom.cdx.json
+make install-check  # build, install into a clean venv, check xgp --help and xgp init
 ```
 
 ## Design notes

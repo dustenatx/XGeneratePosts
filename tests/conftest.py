@@ -10,7 +10,7 @@ import urllib.response
 
 import pytest
 
-import daily_post as d
+from xgenerateposts import net, storage
 
 ENV_VARS = (
     "AI_POST_PROVIDER",
@@ -43,12 +43,11 @@ def isolated(monkeypatch, tmp_path):
     """Clean environment and a throwaway data directory for every test."""
     for var in ENV_VARS:
         monkeypatch.delenv(var, raising=False)
-    monkeypatch.setattr(d, "DATA_DIR", tmp_path)
-    monkeypatch.setattr(d, "HISTORY_FILE", tmp_path / "history.json")
-    monkeypatch.setattr(d, "DRAFTS_FILE", tmp_path / "drafts.md")
-    monkeypatch.setattr(d, "LOG_FILE", tmp_path / "run.log")
-    monkeypatch.setattr(d, "ENV_FILE", tmp_path / "no.env")
-    monkeypatch.setattr(d, "RUN_VIA", "")
+    # config reads these at call time, so the real ~/XPosts and ~/.ai_post_env
+    # are never touched.
+    monkeypatch.setenv("AI_POST_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("AI_POST_ENV_FILE", str(tmp_path / "no.env"))
+    monkeypatch.setattr(storage, "RUN_VIA", "")
     return tmp_path
 
 
@@ -94,7 +93,7 @@ class FakeWeb(urllib.request.HTTPSHandler):
 def web(monkeypatch):
     fake = FakeWeb()
     monkeypatch.setattr(
-        d, "HTTP_OPENER", urllib.request.build_opener(fake, d.NoDowngradeRedirectHandler)
+        net, "HTTP_OPENER", urllib.request.build_opener(fake, net.NoDowngradeRedirectHandler)
     )
     return fake
 
