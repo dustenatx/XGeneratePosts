@@ -1,4 +1,4 @@
-.PHONY: check audit sbom
+.PHONY: check audit sbom install-check
 
 # Lint, format check, types and tests, all from uv.lock. CI's lint job runs this.
 check:
@@ -17,3 +17,7 @@ audit:
 sbom:
 	mkdir -p build
 	uv export --locked --format cyclonedx1.5 --no-dev --preview-features sbom-export --quiet --output-file build/sbom.cdx.json
+
+# R42: build, install the wheel into a fresh venv with a temporary HOME, check xgp init.
+install-check:
+	bash scripts/install-check.sh
