@@ -5,7 +5,7 @@ check:
 	uv run --locked ruff check .
 	uv run --locked ruff format --check .
 	uv run --locked mypy
-	uv run --locked pytest --cov=xgenerateposts --cov-report=term-missing --cov-fail-under=83
+	uv run --locked pytest --cov=xgenerateposts --cov-report=term-missing --cov-fail-under=85
 
 # pip-audit on the lock, exported with hashes so pip-audit doesn't resolve again.
 audit:
