@@ -27,8 +27,11 @@ The model comes from one of three providers (--provider, default groq):
 
 Requirements:
     Python standard library only for groq and openai-compat.
-    pip install anthropic        (only for --provider anthropic)
-    pip install tweepy           (only for --post)
+    The 'anthropic' extra        (only for --provider anthropic)
+    The 'x' extra, tweepy        (only for --post)
+    Installed xgp, from the clone:  uv tool install --reinstall '.[anthropic]'
+    The clone's venv:               ~/.ai_post_venv/bin/pip install -e '.[anthropic]'
+    The pinned versions are in pyproject.toml.
 
 Credentials are read from ~/.ai_post_env — see README.md.
 """
