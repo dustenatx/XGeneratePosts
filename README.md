@@ -37,8 +37,10 @@ Each run:
 - Python 3.14 or newer
 - A free Groq API key — https://console.groq.com/keys
 - Nothing else for the default setup: the `groq` and `openai-compat` providers
-  use only the standard library. `anthropic` is needed only for
-  `--provider anthropic`, and `tweepy` only for `--post`.
+  use only the standard library. `--provider anthropic` needs the `anthropic`
+  extra, pinned in `pyproject.toml`; see [Optional extras](#optional-extras).
+  `--post` needs tweepy, installed by hand (see
+  [Optional: publishing to X](#optional-publishing-to-x)).
 
 ## Setup
 
@@ -57,8 +59,8 @@ the default provider:
 
 ```bash
 python3 -m venv ~/.ai_post_venv
-# only if you will use --provider anthropic:
-~/.ai_post_venv/bin/pip install anthropic
+# only if you will use --provider anthropic, run from the clone:
+~/.ai_post_venv/bin/pip install -e '.[anthropic]'
 ```
 
 **2. API key**, in a protected file outside the repo:
@@ -107,6 +109,31 @@ credentials on your behalf.
 
 Keep this file out of version control — it is personal, and it is already in
 `.gitignore`.
+
+## Optional extras
+
+The Anthropic SDK for `--provider anthropic` is an optional extra, `anthropic`,
+so the default install stays standard library only. Its exact version is pinned
+in `pyproject.toml`. Install it from the repo clone, the route matching how you
+run it:
+
+```bash
+# Installed xgp command:
+uv tool install --reinstall '.[anthropic]'
+# A repo clone's virtual environment:
+~/.ai_post_venv/bin/pip install -e '.[anthropic]'
+```
+
+`uv tool install --reinstall` replaces the whole tool environment, so a later
+`uv tool install --reinstall .` without the extra drops it. In the venv, `-e`
+links the install to this clone: `daily_post.py` and the venv both use the
+clone's code, so a `git pull` needs no reinstall unless the pin in
+`pyproject.toml` changes.
+
+tweepy, for `--post`, isn't an extra yet: tweepy 4.17.0 requires oauthlib
+below 4, and oauthlib 3.3.1 has open advisories fixed only in 4.0.0
+(`docs/decisions.md`). Install it by hand in a clone's venv; see
+[Optional: publishing to X](#optional-publishing-to-x).
 
 ## Usage
 
@@ -196,7 +223,7 @@ the shell wins, and `AI_POST_ENV_FILE` works only from the shell):
 
 ```bash
 ~/.ai_post_venv/bin/pip install tweepy
-python daily_post.py --post
+~/.ai_post_venv/bin/python daily_post.py --post
 ```
 
 Needs an X developer app set to **Read and Write** and four user-context
@@ -266,15 +293,16 @@ In your data directory (`~/XPosts` by default, override with
 ## Development
 
 The dev tools (pytest, pytest-cov, ruff, mypy, pip-audit) are pinned in
-`uv.lock`; the script itself still needs nothing beyond the standard library.
+`uv.lock`, along with the optional `anthropic` extra; the script itself still
+needs nothing beyond the standard library.
 With [uv](https://docs.astral.sh/uv/) installed:
 
 ```bash
 uv sync      # Python from .python-version, plus the dev tools from uv.lock
 make check   # ruff check, ruff format --check, mypy, pytest with coverage
-make audit   # pip-audit against the locked dependencies
-make sbom    # CycloneDX SBOM of the runtime dependencies, to build/sbom.cdx.json
-make install-check  # build, install into a clean venv, check xgp --help and xgp init
+make audit   # pip-audit against the locked dependencies, optional extras included
+make sbom    # CycloneDX SBOM of the runtime dependencies and optional extras, to build/sbom.cdx.json
+make install-check  # build, check the wheel's extras, install into a clean venv, check xgp --help and xgp init
 ```
 
 ### Security checks
@@ -284,7 +312,7 @@ Every pull request to master runs three more checks (`.github/workflows/security
 rules, and `pip-audit` runs `make audit`. gitleaks and Semgrep findings also
 appear in the repo's Security tab. `pip-audit (daily)` runs the same audit on
 master every day, so an advisory against a locked version shows up between
-pull requests. Dependabot proposes weekly updates for `uv.lock` and the
+pull requests. Both audits cover the optional extras. Dependabot proposes weekly updates for `uv.lock` and the
 pinned actions.
 
 `.claude/settings.json` holds the agent rules for Claude Code: it denies
@@ -293,7 +321,8 @@ and asks before every push, `gh pr` and `gh api` call. Only Dusten edits it.
 
 Each push to master uploads the SBOM as a workflow artifact named
 `sbom-<commit SHA>` (`.github/workflows/sbom.yml`, kept 90 days); download it
-from that run on the Actions tab.
+from that run on the Actions tab. From v3.1 PR 3c it lists the optional
+`anthropic` extra and everything it pulls in, not just the package itself.
 
 ## Design notes
 

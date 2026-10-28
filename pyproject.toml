@@ -9,6 +9,11 @@ license-files = ["LICENSE"]
 # Standard library only at runtime (v3 R5).
 dependencies = []
 
+# Optional SDK, pinned exactly (R48): anthropic for --provider anthropic. No x extra for
+# tweepy yet: it requires oauthlib<4, which has open advisories (docs/decisions.md).
+[project.optional-dependencies]
+anthropic = ["anthropic==2.3.0"]
+
 [project.scripts]
 xgp = "xgenerateposts.cli:main"
 

@@ -119,8 +119,10 @@ class AnthropicProvider:
             import anthropic  # imported lazily so other providers need no SDK
         except ImportError:
             raise SystemExit(
-                "\n--provider anthropic needs the anthropic package. Install it with:\n\n"
-                "  ~/.ai_post_venv/bin/pip install anthropic\n"
+                "\n--provider anthropic needs the anthropic package (the 'anthropic' extra).\n"
+                "From the repo clone, install it one of two ways:\n\n"
+                "  installed xgp:      uv tool install --reinstall '.[anthropic]'\n"
+                "  the clone's venv:   ~/.ai_post_venv/bin/pip install -e '.[anthropic]'\n"
             ) from None
 
         extra = {}
