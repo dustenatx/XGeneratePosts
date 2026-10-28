@@ -17,6 +17,24 @@ xgp="$tmp/venv/bin/xgp"
 python="$tmp/venv/bin/python"
 profile="$AI_POST_DATA_DIR/author_profile.md"
 
+# R49: the wheel's METADATA declares each extra in pyproject.toml with its exact
+# pin. This reads the metadata only; the extras are not installed.
+"$python" - dist/*.whl <<'EOF'
+import sys, tomllib, zipfile
+
+extras = tomllib.load(open("pyproject.toml", "rb"))["project"]["optional-dependencies"]
+with zipfile.ZipFile(sys.argv[1]) as wheel:
+    metadata = next(n for n in wheel.namelist() if n.endswith(".dist-info/METADATA"))
+    lines = wheel.read(metadata).decode().splitlines()
+for extra, requirements in extras.items():
+    expected = [f"Provides-Extra: {extra}"]
+    expected += [f"Requires-Dist: {r} ; extra == '{extra}'" for r in requirements]
+    for line in expected:
+        if line not in lines:
+            sys.exit(f"::error::wheel METADATA lacks: {line}")
+        print(line)
+EOF
+
 # Mode as an octal string, plus the file's sha256 when it is a file.
 inspect() {
   "$python" -c '
