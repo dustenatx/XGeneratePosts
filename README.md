@@ -293,15 +293,16 @@ In your data directory (`~/XPosts` by default, override with
 ## Development
 
 The dev tools (pytest, pytest-cov, ruff, mypy, pip-audit) are pinned in
-`uv.lock`; the script itself still needs nothing beyond the standard library.
+`uv.lock`, along with the optional `anthropic` extra; the script itself still
+needs nothing beyond the standard library.
 With [uv](https://docs.astral.sh/uv/) installed:
 
 ```bash
 uv sync      # Python from .python-version, plus the dev tools from uv.lock
 make check   # ruff check, ruff format --check, mypy, pytest with coverage
-make audit   # pip-audit against the locked dependencies
-make sbom    # CycloneDX SBOM of the runtime dependencies, to build/sbom.cdx.json
-make install-check  # build, install into a clean venv, check xgp --help and xgp init
+make audit   # pip-audit against the locked dependencies, optional extras included
+make sbom    # CycloneDX SBOM of the runtime dependencies and optional extras, to build/sbom.cdx.json
+make install-check  # build, check the wheel's extras, install into a clean venv, check xgp --help and xgp init
 ```
 
 ### Security checks
@@ -311,7 +312,7 @@ Every pull request to master runs three more checks (`.github/workflows/security
 rules, and `pip-audit` runs `make audit`. gitleaks and Semgrep findings also
 appear in the repo's Security tab. `pip-audit (daily)` runs the same audit on
 master every day, so an advisory against a locked version shows up between
-pull requests. Dependabot proposes weekly updates for `uv.lock` and the
+pull requests. Both audits cover the optional extras. Dependabot proposes weekly updates for `uv.lock` and the
 pinned actions.
 
 `.claude/settings.json` holds the agent rules for Claude Code: it denies
@@ -320,7 +321,8 @@ and asks before every push, `gh pr` and `gh api` call. Only Dusten edits it.
 
 Each push to master uploads the SBOM as a workflow artifact named
 `sbom-<commit SHA>` (`.github/workflows/sbom.yml`, kept 90 days); download it
-from that run on the Actions tab.
+from that run on the Actions tab. From v3.1 PR 3c it lists the optional
+`anthropic` extra and everything it pulls in, not just the package itself.
 
 ## Design notes
 
