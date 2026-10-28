@@ -14,10 +14,7 @@ def post_to_x(post: str) -> str:
         import tweepy  # imported lazily so draft-only mode needs no dependency
     except ImportError:
         raise SystemExit(
-            "\n--post needs tweepy (the 'x' extra).\n"
-            "From the repo clone, install it one of two ways:\n\n"
-            "  installed xgp:      uv tool install --reinstall '.[x]'\n"
-            "  the clone's venv:   ~/.ai_post_venv/bin/pip install -e '.[x]'\n"
+            "\n--post needs tweepy. Install it with:\n\n  ~/.ai_post_venv/bin/pip install tweepy\n"
         ) from None
 
     creds = config.x_credentials()

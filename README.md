@@ -38,8 +38,9 @@ Each run:
 - A free Groq API key — https://console.groq.com/keys
 - Nothing else for the default setup: the `groq` and `openai-compat` providers
   use only the standard library. `--provider anthropic` needs the `anthropic`
-  extra, and `--post` needs the `x` extra (tweepy). Their exact versions are
-  pinned in `pyproject.toml`; see [Optional extras](#optional-extras).
+  extra, pinned in `pyproject.toml`; see [Optional extras](#optional-extras).
+  `--post` needs tweepy, installed by hand (see
+  [Optional: publishing to X](#optional-publishing-to-x)).
 
 ## Setup
 
@@ -111,29 +112,28 @@ Keep this file out of version control — it is personal, and it is already in
 
 ## Optional extras
 
-The SDKs for `--provider anthropic` and `--post` are optional extras, so the
-default install stays standard library only. Their exact versions are pinned in
-`pyproject.toml`.
-
-| Extra | Installs | Needed for |
-|---|---|---|
-| `anthropic` | the Anthropic SDK | `--provider anthropic` |
-| `x` | tweepy | `--post` |
-
-Install them from the repo clone, the route matching how you run it:
+The Anthropic SDK for `--provider anthropic` is an optional extra, `anthropic`,
+so the default install stays standard library only. Its exact version is pinned
+in `pyproject.toml`. Install it from the repo clone, the route matching how you
+run it:
 
 ```bash
 # Installed xgp command:
-uv tool install --reinstall '.[anthropic]'       # or '.[x]', or '.[anthropic,x]' for both
+uv tool install --reinstall '.[anthropic]'
 # A repo clone's virtual environment:
-~/.ai_post_venv/bin/pip install -e '.[anthropic]'   # or '.[x]', or '.[anthropic,x]'
+~/.ai_post_venv/bin/pip install -e '.[anthropic]'
 ```
 
 `uv tool install --reinstall` replaces the whole tool environment, so a later
-`uv tool install --reinstall .` without the extra drops it. Name every extra
-you use each time you reinstall. In the venv, `-e` links the install to this
-clone: `daily_post.py` and the venv both use the clone's code, so a `git pull`
-needs no reinstall unless the pins in `pyproject.toml` change.
+`uv tool install --reinstall .` without the extra drops it. In the venv, `-e`
+links the install to this clone: `daily_post.py` and the venv both use the
+clone's code, so a `git pull` needs no reinstall unless the pin in
+`pyproject.toml` changes.
+
+tweepy, for `--post`, isn't an extra yet: tweepy 4.17.0 requires oauthlib
+below 4, and oauthlib 3.3.1 has open advisories fixed only in 4.0.0
+(`docs/decisions.md`). Install it by hand in a clone's venv; see
+[Optional: publishing to X](#optional-publishing-to-x).
 
 ## Usage
 
@@ -222,7 +222,7 @@ the shell wins, and `AI_POST_ENV_FILE` works only from the shell):
 ### Optional: publishing to X
 
 ```bash
-~/.ai_post_venv/bin/pip install -e '.[x]'   # installed xgp: uv tool install --reinstall '.[x]'
+~/.ai_post_venv/bin/pip install tweepy
 ~/.ai_post_venv/bin/python daily_post.py --post
 ```
 
