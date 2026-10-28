@@ -10,6 +10,7 @@ Command-line tool that drafts X and LinkedIn posts from an author profile and a 
 - Work on a branch off an up-to-date origin/master. Never commit or push to master. Dusten merges.
 - Never amend, rebase or force-push; every change is a new commit unless Dusten asks otherwise.
 - Files under tests/acceptance/ are frozen acceptance tests, written outside Claude Code and approved by Dusten. Never create, edit, delete, rename or reformat them, and never create a branch named acceptance/*. If a frozen test looks wrong, stop and ask Dusten.
+- `.claude/settings.json` backs these rules with deny and ask rules. Never weaken or remove them; Dusten edits that file.
 
 ## Pull request feedback and auto-fix
 
