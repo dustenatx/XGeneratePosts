@@ -287,6 +287,14 @@ master every day, so an advisory against a locked version shows up between
 pull requests. Dependabot proposes weekly updates for `uv.lock` and the
 pinned actions.
 
+`.claude/settings.json` holds the agent rules for Claude Code: it denies
+merges, force-pushes, amends, rebases, tags and edits to the frozen tests,
+and asks before every push, `gh pr` and `gh api` call. Only Dusten edits it.
+
+Each push to master uploads the SBOM as a workflow artifact named
+`sbom-<commit SHA>` (`.github/workflows/sbom.yml`, kept 90 days); download it
+from that run on the Actions tab.
+
 ## Design notes
 
 **Why the topic is chosen per run rather than fixed.** A single hardcoded
